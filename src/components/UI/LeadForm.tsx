@@ -109,10 +109,10 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
               >
                 <option value="">เลือกความสนใจ</option>
-                <option value="การรักษาคิ้วหน้า">จัดฟันเหล็ก</option>
-                <option value="การฉีดโบท็อกซ์">จัดฟันใส</option>
-                <option value="การดูดไขมัน">รากฟันเทียม</option>
-                <option value="การเสริมจมูก">วีเนียร์</option>
+                <option value="จัดฟันเหล็ก">จัดฟันเหล็ก</option>
+                <option value="จัดฟันใส">จัดฟันใส</option>
+                <option value="รากฟันเทียม">รากฟันเทียม</option>
+                <option value="วีเนียร์">วีเนียร์</option>
               </select>
             </div>
             <div>
