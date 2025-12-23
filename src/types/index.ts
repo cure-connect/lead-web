@@ -17,10 +17,14 @@ export interface Lead {
   // status
   status: LeadStatus;
 
+  appointmentISO?: string;
+
   // appointment
   appointmentDate?: string;
   appointmentTime?: string;
-
+  
+  appointmentDateDisplay?: string;
+  createdAtDisplay:string
   // misc
   note: string;
   createdAt: string;

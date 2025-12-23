@@ -30,17 +30,20 @@ const LeadsPage: React.FC = () => {
           },
         });
 
-        if (!res.ok) {
-          throw new Error("Fetch leads failed");
-        }
+        if (!res.ok) throw new Error("Fetch leads failed");
 
         const result = await res.json();
 
         const mappedLeads: Lead[] = (Array.isArray(result.data) ? result.data : []).map(
           (item: any) => {
             const createdDate = new Date(item.createdAt);
-            const buddhistYear = createdDate.getFullYear() + 543;
-            const month = String(createdDate.getMonth() + 1).padStart(2, "0");
+            const createdAtDisplay = `${String(createdDate.getDate()).padStart(2, "0")}/${String(createdDate.getMonth() + 1).padStart(2, "0")}/${createdDate.getFullYear()}`;
+
+            let appointmentDateDisplay: string | undefined = undefined;
+            if (item.appointments?.date) {
+              const appt = new Date(item.appointments.date);
+              appointmentDateDisplay = `${String(appt.getDate()).padStart(2, "0")}/${String(appt.getMonth() + 1).padStart(2, "0")}/${appt.getFullYear()} ${String(appt.getHours()).padStart(2, "0")}:${String(appt.getMinutes()).padStart(2, "0")}`;
+            }
 
             return {
               id: item._id,
@@ -51,26 +54,20 @@ const LeadsPage: React.FC = () => {
               referralChannel: item.referralChannel || "",
               admin: item.createdBy || "",
               branch: item.clinic?.branch || "",
-              status:
-                item.appointments?.status === "scheduled"
-                  ? "Scheduled"
-                  : "Pending",
-              appointmentDate: item.appointments?.date
-                ? item.appointments.date.split("T")[0]
-                : undefined,
-              appointmentTime: item.appointments?.date
-                ? item.appointments.date.split("T")[1]?.substring(0, 5)
-                : undefined,
+              status: item.appointments?.status === "scheduled" ? "Scheduled" : "Pending",
+              createdAt: item.createdAt,
+              createdAtDisplay,
+              appointmentDate: item.appointments?.date || undefined,
+              appointmentDateDisplay,
               note: item.note || "",
-              createdAt: `${buddhistYear}-${month}`,
             };
           }
         );
 
-
+        mappedLeads.sort((a, b) => (b.createdAt > a.createdAt ? 1 : -1));
         setLeads(mappedLeads);
       } catch (error) {
-        console.error("❌ fetch leads error:", error);
+        console.error("fetch leads error:", error);
         setLeads(mockLeads);
       }
     };
@@ -79,37 +76,36 @@ const LeadsPage: React.FC = () => {
   }, []);
 
 
+
   const filteredLeads = useMemo(() => {
     const [year, month] = selectedMonth.split("-");
-    const buddhistMonth = `${Number(year) + 543}-${month}`;
 
     return leads.filter((lead) => {
-      const matchesMonth = lead.createdAt.startsWith(buddhistMonth);
+      const matchesMonth = lead.createdAt?.startsWith(`${year}-${month}`);
       const matchesSearch =
         searchQuery === "" ||
         lead.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         lead.phone.includes(searchQuery) ||
         lead.lineId.toLowerCase().includes(searchQuery.toLowerCase());
 
-
       return matchesMonth && matchesSearch;
     });
   }, [leads, selectedMonth, searchQuery]);
 
-  /* ================= SUMMARY ================= */
   const summary = useMemo(() => {
-    return {
-      total: filteredLeads.length,
-      withAppointment: filteredLeads.filter(
-        (l) => l.status === "Scheduled"
-      ).length,
-      waiting: filteredLeads.filter(
-        (l) => l.status === "Pending"
-      ).length,
-    };
-  }, [filteredLeads]);
+    const [year, month] = selectedMonth.split("-");
+    const leadsInMonth = leads.filter((lead) =>
+      lead.createdAt?.startsWith(`${year}-${month}`)
+    );
 
-  /* ================= SAVE ================= */
+    return {
+      total: leadsInMonth.length,
+      withAppointment: leadsInMonth.filter((l) => l.status === "Scheduled").length,
+      waiting: leadsInMonth.filter((l) => l.status === "Pending").length,
+    };
+  }, [leads, selectedMonth]);
+
+
   const handleSave = async (lead: Lead) => {
     try {
       if (!editingLead) {
@@ -151,23 +147,43 @@ const LeadsPage: React.FC = () => {
         }
 
         const result = await res.json();
+        const createdItem = result?.data || result?.lead || result;
 
-        const createdId =
-          result?.data?._id ||
-          result?._id ||
-          result?.lead?._id;
+        const createdDate = new Date(createdItem.createdAt || new Date());
+        const createdAtDisplay = `${String(createdDate.getDate()).padStart(2, "0")}/${String(createdDate.getMonth() + 1).padStart(2, "0")}/${createdDate.getFullYear()}`;
 
-        if (!createdId) {
-          throw new Error("Invalid create lead response");
+        let appointmentDateDisplay: string | undefined = undefined;
+        if (createdItem.appointments?.date) {
+          const appt = new Date(createdItem.appointments.date);
+          appointmentDateDisplay = `${String(appt.getDate()).padStart(2, "0")}/${String(appt.getMonth() + 1).padStart(2, "0")}/${appt.getFullYear()} ${String(appt.getHours()).padStart(2, "0")}:${String(appt.getMinutes()).padStart(2, "0")}`;
         }
 
-        setLeads((prev) => [
-          ...prev,
-          {
-            ...lead,
-            id: createdId,
-          },
-        ]);
+        setLeads((prev) => {
+          const updated = [
+            {
+              id: createdItem._id,
+              name: lead.name,
+              phone: lead.phone,
+              lineId: lead.lineId || "",
+              interest: lead.interest,
+              referralChannel: lead.referralChannel,
+              admin: "admin",
+              branch: "Bangkok",
+              status: lead.status,
+              createdAt: createdItem.createdAt,
+              createdAtDisplay,
+              appointmentDate: createdItem.appointments?.date || lead.appointmentDate,
+              appointmentDateDisplay,
+              note: lead.note,
+            },
+            ...prev,
+          ];
+
+          updated.sort((a, b) => (b.createdAt > a.createdAt ? 1 : -1));
+
+          return updated;
+        });
+
       } else {
         setLeads((prev) =>
           prev.map((l) => (l.id === lead.id ? lead : l))
@@ -181,7 +197,7 @@ const LeadsPage: React.FC = () => {
     }
   };
 
-  /* ================= DELETE ================= */
+
   const handleDelete = (id: string) => {
     if (confirm("คุณต้องการลบข้อมูลนี้ใช่หรือไม่?")) {
       setLeads((prev) => prev.filter((l) => l.id !== id));
@@ -214,7 +230,6 @@ const LeadsPage: React.FC = () => {
         {/* TABLE */}
         <div className="bg-white rounded-lg shadow">
           <div className="p-6 border-b flex gap-4 max-md:flex-col">
-            {/* 📅 ปฏิทิน เดือน/ปี */}
             <input
               type="month"
               value={selectedMonth}
@@ -271,9 +286,9 @@ const LeadsPage: React.FC = () => {
                         {statusLabel[lead.status]}
                       </span>
                     </td>
-                    <td className="px-6 py-4">{lead.createdAt}</td>
+                    <td className="px-6 py-4">{lead.createdAtDisplay}</td>
                     <td className="px-6 py-4">
-                      {lead.appointmentDate || "ยังไม่นัด"}
+                      {lead.appointmentDateDisplay || "-"}
                     </td>
                     <td className="px-6 py-4 flex gap-3">
                       <Edit2
@@ -319,7 +334,6 @@ const LeadsPage: React.FC = () => {
 
 export default LeadsPage;
 
-/* ================= COMPONENT ================= */
 const SummaryBox = ({
   label,
   value,

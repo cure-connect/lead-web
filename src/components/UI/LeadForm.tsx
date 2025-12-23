@@ -30,14 +30,16 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
 
   const handleSubmit = () => {
     const now = new Date();
-    const gregorianYear = now.getFullYear();
-    const buddhistYear = gregorianYear + 543;
+    const buddhistYear = now.getFullYear() + 543;
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const day = String(now.getDate()).padStart(2, '0');
 
     const createdAt = lead?.createdAt || `${buddhistYear}-${month}-${day}`;
+
     const backendStatus =
-      formData.status === 'ทำนัด' ? 'Scheduled' : 'Pending';
+      formData.status === 'ทำนัด' || formData.status === 'Scheduled'
+        ? 'Scheduled'
+        : 'Pending';
 
     onSave({
       ...(lead || {}),
@@ -48,9 +50,10 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
         backendStatus === 'Scheduled' ? formData.appointmentDate : undefined,
       appointmentTime:
         backendStatus === 'Scheduled' ? formData.appointmentTime : undefined,
-      createdAt
+      createdAt,
     } as Lead);
   };
+
 
   return (
     <div className="space-y-6">
@@ -106,10 +109,10 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
               >
                 <option value="">เลือกความสนใจ</option>
-                <option value="การรักษาคิ้วหน้า">การรักษาคิ้วหน้า</option>
-                <option value="การฉีดโบท็อกซ์">การฉีดโบท็อกซ์</option>
-                <option value="การดูดไขมัน">การดูดไขมัน</option>
-                <option value="การเสริมจมูก">การเสริมจมูก</option>
+                <option value="การรักษาคิ้วหน้า">จัดฟันเหล็ก</option>
+                <option value="การฉีดโบท็อกซ์">จัดฟันใส</option>
+                <option value="การดูดไขมัน">รากฟันเทียม</option>
+                <option value="การเสริมจมูก">วีเนียร์</option>
               </select>
             </div>
             <div>
