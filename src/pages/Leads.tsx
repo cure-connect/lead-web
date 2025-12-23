@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { Search, Plus, Edit2, Trash2 } from "lucide-react";
 import { type Lead } from "../types";
-import { mockLeads } from "../lib/mock";
 import Modal from "../components/UI/Modal";
 import LeadForm from "../components/UI/LeadForm";
 
@@ -18,7 +17,7 @@ const LeadsPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
-  const [leads, setLeads] = useState<Lead[]>(mockLeads);
+  const [leads, setLeads] = useState<Lead[]>([]);
 
   useEffect(() => {
     const fetchLeads = async () => {
@@ -68,7 +67,7 @@ const LeadsPage: React.FC = () => {
         setLeads(mappedLeads);
       } catch (error) {
         console.error("fetch leads error:", error);
-        setLeads(mockLeads);
+        setLeads([]);
       }
     };
 

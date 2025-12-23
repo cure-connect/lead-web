@@ -1,14 +1,13 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import Dashboard from "../pages/Dashboard";
 import Leads from "../pages/Leads";
-import Login from "../pages/Login";
+//import Login from "../pages/Login";
 import Setting from "../pages/Setting";
-import Admin from "../pages/Admin";
+//import Admin from "../pages/Admin";
 import Header from "../components/layouts/Header";
-import { useAuth } from "../context/AuthContext";
+//import { useAuth } from "../context/AuthContext";
 
 const AppRoutes: React.FC = () => {
-  const { username } = useAuth();
 
   return (
     <>

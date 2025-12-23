@@ -118,7 +118,7 @@ export default function SettingsPage() {
                 onClick={() => setOpenDropdown(prev => (prev === key ? null : key))}
                 className="w-full p-6 flex items-center gap-4 hover:bg-gray-50 transition-colors"
               >
-                <div className={`${section.iconBg} p-3 rounded-full flex-shrink-0`}>
+                <div className={`${section.iconBg} p-3 rounded-full shrink-0`}>
                   {section.icon}
                 </div>
                 <div className="flex-1 text-left">
