@@ -5,8 +5,8 @@ import { mockLeads } from "../lib/mock";
 import Modal from "../components/UI/Modal";
 import LeadForm from "../components/UI/LeadForm";
 
-const API_URL = "http://localhost:3000/lead/v1/api";
-const API_KEY = "cureconnectkeytoken12345";
+const API_URL = import.meta.env.VITE_API_URL;
+const API_KEY = import.meta.env.VITE_API_KEY;
 
 const statusLabel: Record<string, string> = {
   Pending: "รอตัดสินใจ",
@@ -23,7 +23,7 @@ const LeadsPage: React.FC = () => {
   useEffect(() => {
     const fetchLeads = async () => {
       try {
-        const res = await fetch("http://localhost:3000/lead/v1/api/lead", {
+        const res = await fetch(`${API_URL}/lead`, {
           headers: {
             "Content-Type": "application/json",
             "x-api-key": API_KEY,
