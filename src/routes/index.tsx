@@ -21,7 +21,7 @@ const AppRoutes: React.FC = () => {
 
         <Route path="/leads" element={<Leads />} />
         <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/admin" element={<Admin />} />
+        {/* <Route path="/admin" element={<Admin />} /> */}
         <Route path="/setting" element={<Setting />} />
 
         <Route path="*" element={<Navigate to="/leads" />} />

@@ -29,11 +29,11 @@ const Header: React.FC = () => {
       path: "leads",
       icon: <Users className="w-4 h-4" />,
     },
-    {
-      name: "Admin",
-      path: "admin",
-      icon: <User className="w-4 h-4" />,
-    },
+    // {
+    //   name: "Admin",
+    //   path: "admin",
+    //   icon: <User className="w-4 h-4" />,
+    // },
     {
       name: "Settings",
       path: "setting",
