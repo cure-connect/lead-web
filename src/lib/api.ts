@@ -1,9 +1,9 @@
 export const createLeadApi = async (payload: any) => {
-  const res = await fetch("http://localhost:3000/lead/v1/api/createleads", {
+  const res = await fetch(`${import.meta.env.VITE_API_URL}/createleads`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-api-key": "cureconnectkeytoken12345",
+      "x-api-key": import.meta.env.VITE_API_KEY,
     },
     body: JSON.stringify(payload),
   });

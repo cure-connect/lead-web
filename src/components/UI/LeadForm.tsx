@@ -22,10 +22,10 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
     lineId: lead?.lineId || '',
     admin: lead?.admin || '',
     branch: lead?.branch || '',
-    status: lead?.status || 'รอตัดสินใจ',
+    status: lead?.status === 'Scheduled' ? 'ทำนัด' : 'รอตัดสินใจ',
     appointmentDate: lead?.appointmentDate || '',
     appointmentTime: lead?.appointmentTime || '',
-    notes: lead?.note || ''
+    note: lead?.note || ''
   });
 
   const handleSubmit = () => {
@@ -33,7 +33,6 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
     const buddhistYear = now.getFullYear() + 543;
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const day = String(now.getDate()).padStart(2, '0');
-
     const createdAt = lead?.createdAt || `${buddhistYear}-${month}-${day}`;
 
     const backendStatus =
@@ -44,12 +43,10 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
     onSave({
       ...(lead || {}),
       ...formData,
-      id: lead?.id || Date.now().toString(),
+      id: lead?.id || '',
       status: backendStatus,
-      appointmentDate:
-        backendStatus === 'Scheduled' ? formData.appointmentDate : undefined,
-      appointmentTime:
-        backendStatus === 'Scheduled' ? formData.appointmentTime : undefined,
+      appointmentDate: backendStatus === 'Scheduled' ? formData.appointmentDate : undefined,
+      appointmentTime: backendStatus === 'Scheduled' ? formData.appointmentTime : undefined,
       createdAt,
     } as Lead);
   };
@@ -192,7 +189,15 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
             <label className="block text-sm font-medium text-gray-700 mb-2">สถานะ</label>
             <select
               value={formData.status}
-              onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+              onChange={(e) => {
+                const newStatus = e.target.value;
+                setFormData({
+                  ...formData,
+                  status: newStatus,
+                  appointmentDate: newStatus === 'รอตัดสินใจ' ? '' : formData.appointmentDate,
+                  appointmentTime: newStatus === 'รอตัดสินใจ' ? '' : formData.appointmentTime
+                });
+              }}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
             >
               <option value="รอตัดสินใจ">รอตัดสินใจ</option>
@@ -226,8 +231,8 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
           <div>
             <label className="block text	sm font-medium text-gray-700 mb-2">รายละเอียดเพิ่มเติม</label>
             <textarea
-              value={formData.notes}
-              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              value={formData.note}
+              onChange={(e) => setFormData({ ...formData, note: e.target.value })}
               rows={4}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
             />

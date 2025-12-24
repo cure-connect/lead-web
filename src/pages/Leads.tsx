@@ -1,3 +1,4 @@
+// LeadsPage.tsx
 import React, { useState, useMemo, useEffect } from "react";
 import { Search, Plus, Edit2, Trash2 } from "lucide-react";
 import { type Lead } from "../types";
@@ -12,6 +13,16 @@ const statusLabel: Record<string, string> = {
   Scheduled: "ทำนัดแล้ว",
 };
 
+const formatDate = (dateStr: string) => {
+  const date = new Date(dateStr);
+  return `${String(date.getDate()).padStart(2, "0")}/${String(date.getMonth() + 1).padStart(2, "0")}/${date.getFullYear()}`;
+};
+
+const formatDateTime = (dateStr: string) => {
+  const date = new Date(dateStr);
+  return `${String(date.getDate()).padStart(2, "0")}/${String(date.getMonth() + 1).padStart(2, "0")}/${date.getFullYear()} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+};
+
 const LeadsPage: React.FC = () => {
   const [selectedMonth, setSelectedMonth] = useState("2025-12");
   const [searchQuery, setSearchQuery] = useState("");
@@ -19,66 +30,60 @@ const LeadsPage: React.FC = () => {
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [leads, setLeads] = useState<Lead[]>([]);
 
+  const fetchLeads = async () => {
+    try {
+      const res = await fetch(`${API_URL}/lead`, {
+        headers: { "Content-Type": "application/json", "x-api-key": API_KEY },
+      });
+
+      if (!res.ok) throw new Error("Fetch leads failed");
+
+      const result = await res.json();
+
+      const mappedLeads: Lead[] = (Array.isArray(result.data) ? result.data : []).map(
+        (item: any) => {
+          const createdAtDisplay = formatDate(item.createdAt);
+
+          const status = item.appointments?.status === "scheduled" ? "Scheduled" : "Pending";
+
+          const appointmentDateDisplay =
+            status === "Scheduled" && item.appointments?.date && item.appointments.date !== null
+              ? formatDateTime(item.appointments.date)
+              : "ยังไม่นัด";
+
+          return {
+            id: item._id,
+            name: item.patient?.name || "",
+            phone: item.patient?.tel || "",
+            lineId: item.patient?.lineId || "",
+            interest: item.interests || "",
+            referralChannel: item.referralChannel || "",
+            admin: item.createdBy || "",
+            branch: item.clinic?.branch || "",
+            status,
+            createdAt: item.createdAt,
+            createdAtDisplay,
+            appointmentDate: status === "Scheduled" && item.appointments?.date ? item.appointments.date : undefined,
+            appointmentDateDisplay,
+            note: item.note || "",
+          };
+        }
+      );
+
+      mappedLeads.sort((a, b) => (b.createdAt > a.createdAt ? 1 : -1));
+      setLeads(mappedLeads);
+    } catch (error) {
+      console.error("fetch leads error:", error);
+      setLeads([]);
+    }
+  };
+
   useEffect(() => {
-    const fetchLeads = async () => {
-      try {
-        const res = await fetch(`${API_URL}/lead`, {
-          headers: {
-            "Content-Type": "application/json",
-            "x-api-key": API_KEY,
-          },
-        });
-
-        if (!res.ok) throw new Error("Fetch leads failed");
-
-        const result = await res.json();
-
-        const mappedLeads: Lead[] = (Array.isArray(result.data) ? result.data : []).map(
-          (item: any) => {
-            const createdDate = new Date(item.createdAt);
-            const createdAtDisplay = `${String(createdDate.getDate()).padStart(2, "0")}/${String(createdDate.getMonth() + 1).padStart(2, "0")}/${createdDate.getFullYear()}`;
-
-            let appointmentDateDisplay: string | undefined = undefined;
-            if (item.appointments?.date) {
-              const appt = new Date(item.appointments.date);
-              appointmentDateDisplay = `${String(appt.getDate()).padStart(2, "0")}/${String(appt.getMonth() + 1).padStart(2, "0")}/${appt.getFullYear()} ${String(appt.getHours()).padStart(2, "0")}:${String(appt.getMinutes()).padStart(2, "0")}`;
-            }
-
-            return {
-              id: item._id,
-              name: item.patient?.name || "",
-              phone: item.patient?.tel || "",
-              lineId: item.patient?.lineId || "",
-              interest: item.interests || "",
-              referralChannel: item.referralChannel || "",
-              admin: item.createdBy || "",
-              branch: item.clinic?.branch || "",
-              status: item.appointments?.status === "scheduled" ? "Scheduled" : "Pending",
-              createdAt: item.createdAt,
-              createdAtDisplay,
-              appointmentDate: item.appointments?.date || undefined,
-              appointmentDateDisplay,
-              note: item.note || "",
-            };
-          }
-        );
-
-        mappedLeads.sort((a, b) => (b.createdAt > a.createdAt ? 1 : -1));
-        setLeads(mappedLeads);
-      } catch (error) {
-        console.error("fetch leads error:", error);
-        setLeads([]);
-      }
-    };
-
     fetchLeads();
   }, []);
 
-
-
   const filteredLeads = useMemo(() => {
     const [year, month] = selectedMonth.split("-");
-
     return leads.filter((lead) => {
       const matchesMonth = lead.createdAt?.startsWith(`${year}-${month}`);
       const matchesSearch =
@@ -86,7 +91,6 @@ const LeadsPage: React.FC = () => {
         lead.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         lead.phone.includes(searchQuery) ||
         lead.lineId.toLowerCase().includes(searchQuery.toLowerCase());
-
       return matchesMonth && matchesSearch;
     });
   }, [leads, selectedMonth, searchQuery]);
@@ -96,7 +100,6 @@ const LeadsPage: React.FC = () => {
     const leadsInMonth = leads.filter((lead) =>
       lead.createdAt?.startsWith(`${year}-${month}`)
     );
-
     return {
       total: leadsInMonth.length,
       withAppointment: leadsInMonth.filter((l) => l.status === "Scheduled").length,
@@ -104,91 +107,52 @@ const LeadsPage: React.FC = () => {
     };
   }, [leads, selectedMonth]);
 
-
   const handleSave = async (lead: Lead) => {
     try {
-      if (!editingLead) {
-        const payload = {
-          clinic: {
-            clinicId: "CLINIC001",
-            name: "Smile Dental",
-            branch: "Bangkok",
-          },
-          patient: {
-            name: lead.name,
-            tel: lead.phone,
-            lineId: lead.lineId || undefined,
-          },
-          appointments: {
-            status: lead.status === "Scheduled" ? "scheduled" : "pending",
-            date: lead.appointmentDate
-              ? `${lead.appointmentDate}T${lead.appointmentTime}:00+07:00`
-              : new Date().toISOString(),
-          },
-          interests: lead.interest,
-          referralChannel: lead.referralChannel,
-          note: lead.note,
-          createdBy: "admin",
-        };
+      const payload: any = {
+        patient: { name: lead.name, tel: lead.phone, lineId: lead.lineId || undefined },
+        interests: lead.interest,
+        referralChannel: lead.referralChannel,
+        note: lead.note,
+        createdBy: lead.admin,
+      };
 
+      if (lead.status === "Scheduled") {
+        payload.appointments = {
+          status: "scheduled",
+          date: lead.appointmentDate && lead.appointmentTime
+            ? `${lead.appointmentDate}T${lead.appointmentTime}:00+07:00`
+            : new Date().toISOString(),
+        };
+      } else {
+        // ถ้า Pending ให้ลบวันนัดเดิม
+        payload.appointments = { status: "pending", date: null };
+      }
+
+      if (!editingLead) {
+        payload.clinic = { clinicId: "CLINIC001", name: "Smile Dental", branch: lead.branch || "Bangkok" };
         const res = await fetch(`${API_URL}/createlead`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-api-key": API_KEY,
-          },
+          headers: { "Content-Type": "application/json", "x-api-key": API_KEY },
           body: JSON.stringify(payload),
         });
-
         if (!res.ok) {
           const err = await res.json();
           throw new Error(err.message || "Create lead failed");
         }
-
-        const result = await res.json();
-        const createdItem = result?.data || result?.lead || result;
-
-        const createdDate = new Date(createdItem.createdAt || new Date());
-        const createdAtDisplay = `${String(createdDate.getDate()).padStart(2, "0")}/${String(createdDate.getMonth() + 1).padStart(2, "0")}/${createdDate.getFullYear()}`;
-
-        let appointmentDateDisplay: string | undefined = undefined;
-        if (createdItem.appointments?.date) {
-          const appt = new Date(createdItem.appointments.date);
-          appointmentDateDisplay = `${String(appt.getDate()).padStart(2, "0")}/${String(appt.getMonth() + 1).padStart(2, "0")}/${appt.getFullYear()} ${String(appt.getHours()).padStart(2, "0")}:${String(appt.getMinutes()).padStart(2, "0")}`;
-        }
-
-        setLeads((prev) => {
-          const updated = [
-            {
-              id: createdItem._id,
-              name: lead.name,
-              phone: lead.phone,
-              lineId: lead.lineId || "",
-              interest: lead.interest,
-              referralChannel: lead.referralChannel,
-              admin: "admin",
-              branch: "Bangkok",
-              status: lead.status,
-              createdAt: createdItem.createdAt,
-              createdAtDisplay,
-              appointmentDate: createdItem.appointments?.date || lead.appointmentDate,
-              appointmentDateDisplay,
-              note: lead.note,
-            },
-            ...prev,
-          ];
-
-          updated.sort((a, b) => (b.createdAt > a.createdAt ? 1 : -1));
-
-          return updated;
-        });
-
       } else {
-        setLeads((prev) =>
-          prev.map((l) => (l.id === lead.id ? lead : l))
-        );
+        const res = await fetch(`${API_URL}/${lead.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", "x-api-key": API_KEY },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.message || "Update lead failed");
+        }
       }
 
+      await fetchLeads();
       setIsModalOpen(false);
       setEditingLead(null);
     } catch (error: any) {
@@ -197,9 +161,13 @@ const LeadsPage: React.FC = () => {
   };
 
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm("คุณต้องการลบข้อมูลนี้ใช่หรือไม่?")) {
-      setLeads((prev) => prev.filter((l) => l.id !== id));
+      await fetch(`${API_URL}/${id}`, {
+        method: "DELETE",
+        headers: { "x-api-key": API_KEY },
+      });
+      await fetchLeads();
     }
   };
 
@@ -207,26 +175,14 @@ const LeadsPage: React.FC = () => {
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 py-8">
         <h1 className="text-3xl font-bold mb-2">Leads</h1>
-        <p className="text-gray-600 mb-8">
-          รายชื่อลูกค้าที่ลงข้อมูลและการติดตาม
-        </p>
+        <p className="text-gray-600 mb-8">รายชื่อลูกค้าที่ลงข้อมูลและการติดตาม</p>
 
-        {/* SUMMARY */}
         <div className="grid grid-cols-3 gap-6 mb-8 max-md:grid-cols-1">
           <SummaryBox label="ทั้งหมด" value={summary.total} />
-          <SummaryBox
-            label="ทำนัดแล้ว"
-            value={summary.withAppointment}
-            color="text-green-600"
-          />
-          <SummaryBox
-            label="รอตัดสินใจ"
-            value={summary.waiting}
-            color="text-orange-600"
-          />
+          <SummaryBox label="ทำนัดแล้ว" value={summary.withAppointment} color="text-green-600" />
+          <SummaryBox label="รอตัดสินใจ" value={summary.waiting} color="text-orange-600" />
         </div>
 
-        {/* TABLE */}
         <div className="bg-white rounded-lg shadow">
           <div className="p-6 border-b flex gap-4 max-md:flex-col">
             <input
@@ -235,7 +191,6 @@ const LeadsPage: React.FC = () => {
               onChange={(e) => setSelectedMonth(e.target.value)}
               className="px-4 py-2 border rounded-md"
             />
-
             <div className="flex items-center w-full border rounded-md px-3">
               <Search className="w-5 h-5 text-gray-400 mr-2" />
               <input
@@ -245,12 +200,8 @@ const LeadsPage: React.FC = () => {
                 className="w-full py-2 outline-none"
               />
             </div>
-
             <button
-              onClick={() => {
-                setEditingLead(null);
-                setIsModalOpen(true);
-              }}
+              onClick={() => { setEditingLead(null); setIsModalOpen(true); }}
               className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-md"
             >
               <Plus className="w-5 h-5" />
@@ -276,29 +227,17 @@ const LeadsPage: React.FC = () => {
                     <td className="px-6 py-4">{lead.name}</td>
                     <td className="px-6 py-4">{lead.phone}</td>
                     <td className="px-6 py-4">
-                      <span
-                        className={`px-2 py-1 rounded-full text-xs ${lead.status === "Scheduled"
-                          ? "bg-green-100 text-green-800"
-                          : "bg-orange-100 text-orange-800"
-                          }`}
-                      >
+                      <span className={`px-2 py-1 rounded-full text-xs ${lead.status === "Scheduled" ? "bg-green-100 text-green-800" : "bg-orange-100 text-orange-800"}`}>
                         {statusLabel[lead.status]}
                       </span>
                     </td>
                     <td className="px-6 py-4">{lead.createdAtDisplay}</td>
-                    <td className="px-6 py-4">
-                      {lead.appointmentDateDisplay || "-"}
-                    </td>
+                    <td className="px-6 py-4">{lead.appointmentDateDisplay}</td>
                     <td className="px-6 py-4 flex gap-3">
-                      <Edit2
-                        className="w-4 h-4 text-indigo-600 cursor-pointer"
-                        onClick={() => {
-                          setEditingLead(lead);
-                          setIsModalOpen(true);
-                        }}
+                      <Edit2 className="w-4 h-4 text-indigo-600 cursor-pointer"
+                        onClick={() => { setEditingLead(lead); setIsModalOpen(true); }}
                       />
-                      <Trash2
-                        className="w-4 h-4 text-red-600 cursor-pointer"
+                      <Trash2 className="w-4 h-4 text-red-600 cursor-pointer"
                         onClick={() => handleDelete(lead.id)}
                       />
                     </td>
@@ -312,19 +251,13 @@ const LeadsPage: React.FC = () => {
 
       <Modal
         isOpen={isModalOpen}
-        onClose={() => {
-          setIsModalOpen(false);
-          setEditingLead(null);
-        }}
+        onClose={() => { setIsModalOpen(false); setEditingLead(null); }}
         title={editingLead ? "แก้ไขข้อมูล Lead" : "เพิ่มข้อมูล Lead"}
       >
         <LeadForm
           lead={editingLead}
           onSave={handleSave}
-          onClose={() => {
-            setIsModalOpen(false);
-            setEditingLead(null);
-          }}
+          onClose={() => { setIsModalOpen(false); setEditingLead(null); }}
         />
       </Modal>
     </div>
@@ -333,15 +266,7 @@ const LeadsPage: React.FC = () => {
 
 export default LeadsPage;
 
-const SummaryBox = ({
-  label,
-  value,
-  color = "",
-}: {
-  label: string;
-  value: number;
-  color?: string;
-}) => (
+const SummaryBox = ({ label, value, color = "" }: { label: string; value: number; color?: string }) => (
   <div className="bg-white rounded-lg shadow p-6">
     <div className="text-sm text-gray-600 mb-2">{label}</div>
     <div className={`text-3xl font-bold ${color}`}>{value}</div>
