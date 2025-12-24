@@ -1,4 +1,3 @@
-// LeadsPage.tsx
 import React, { useState, useMemo, useEffect } from "react";
 import { Search, Plus, Edit2, Trash2 } from "lucide-react";
 import { type Lead } from "../types";
@@ -125,7 +124,6 @@ const LeadsPage: React.FC = () => {
             : new Date().toISOString(),
         };
       } else {
-        // ถ้า Pending ให้ลบวันนัดเดิม
         payload.appointments = { status: "pending", date: null };
       }
 
