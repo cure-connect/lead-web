@@ -12,6 +12,7 @@ import {
 interface Item {
   id: number;
   name: string;
+  price?: number;
 }
 
 interface SectionData {
@@ -59,14 +60,14 @@ export default function SettingsPage() {
     channels: { title: "ช่องทางที่รู้จัก", icon: <Radio className="w-5 h-5 text-purple-600" />, iconBg: "bg-purple-100", items: [] }
   });
 
-  const [inputs, setInputs] = useState<Record<string, string>>({});
-  const [createOpen, setCreateOpen] = useState(false);
+  const [inputs, setInputs] = useState<Record<string, { name: string; price?: string }>>({});
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   const [currentSection, setCurrentSection] = useState<string | null>(null);
   const [currentItem, setCurrentItem] = useState<Item | null>(null);
   const [editValue, setEditValue] = useState("");
+  const [editPrice, setEditPrice] = useState<string>("");
 
   useEffect(() => {
     Object.entries(API_MAP).forEach(async ([key, api]) => {
@@ -85,33 +86,32 @@ export default function SettingsPage() {
     });
   }, []);
 
-  const openCreateModal = (sectionKey: string) => {
-    if (!inputs[sectionKey]?.trim()) return;
-    setCurrentSection(sectionKey);
-    setCreateOpen(true);
-  };
+  const createItem = async (sectionKey: string) => {
+    const inputData = inputs[sectionKey];
+    if (!inputData?.name?.trim() || (sectionKey === "interests" && !inputData.price?.trim())) return;
 
-  const confirmCreate = async () => {
-    if (!currentSection) return;
-    const api = API_MAP[currentSection as keyof typeof API_MAP];
+    const api = API_MAP[sectionKey as keyof typeof API_MAP];
+    const payload: any = { type: api.type, name: inputData.name };
+    if (sectionKey === "interests") {
+      payload.price = parseFloat(inputData.price!);
+    }
 
     try {
       const res = await fetch(`${BASE_URL}/setting/create`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-api-key": API_KEY },
-        body: JSON.stringify({ type: api.type, name: inputs[currentSection] })
+        body: JSON.stringify(payload)
       });
       const json = await res.json();
 
       setSections(prev => ({
         ...prev,
-        [currentSection]: { ...prev[currentSection], items: [...prev[currentSection].items, json.data] }
+        [sectionKey]: { ...prev[sectionKey], items: [...prev[sectionKey].items, json.data] }
       }));
 
-      setInputs(prev => ({ ...prev, [currentSection]: "" }));
-      setCreateOpen(false);
+      setInputs(prev => ({ ...prev, [sectionKey]: { name: "", price: "" } }));
     } catch (err) {
-      console.error("Failed to create", currentSection, err);
+      console.error("Failed to create", sectionKey, err);
     }
   };
 
@@ -119,6 +119,7 @@ export default function SettingsPage() {
     setCurrentSection(sectionKey);
     setCurrentItem(item);
     setEditValue(item.name);
+    setEditPrice(item.price?.toString() || "");
     setEditOpen(true);
   };
 
@@ -126,11 +127,16 @@ export default function SettingsPage() {
     if (!currentSection || !currentItem) return;
     const api = API_MAP[currentSection as keyof typeof API_MAP];
 
+    const payload: any = { name: editValue };
+    if (currentSection === "interests") {
+      payload.price = parseFloat(editPrice);
+    }
+
     try {
       await fetch(`${BASE_URL}${api.edit(currentItem.id)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json", "x-api-key": API_KEY },
-        body: JSON.stringify({ name: editValue })
+        body: JSON.stringify(payload)
       });
 
       setSections(prev => ({
@@ -138,7 +144,7 @@ export default function SettingsPage() {
         [currentSection]: {
           ...prev[currentSection],
           items: prev[currentSection].items.map(i =>
-            i.id === currentItem.id ? { ...i, name: editValue } : i
+            i.id === currentItem.id ? { ...i, name: editValue, price: currentSection === "interests" ? parseFloat(editPrice) : i.price } : i
           )
         }
       }));
@@ -191,24 +197,54 @@ export default function SettingsPage() {
               </div>
 
               <div className="flex flex-col sm:flex-row gap-2 mb-4">
-                <input
-                  value={inputs[key] || ""}
-                  onChange={e => setInputs(prev => ({ ...prev, [key]: e.target.value }))}
-                  placeholder={`เพิ่ม${section.title}`}
-                  className="flex-1 px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                />
-                <button
-                  onClick={() => openCreateModal(key)}
-                  className="px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 w-full sm:w-auto flex justify-center items-center"
-                >
-                  <Plus className="w-5 h-5 sm:w-4 sm:h-4" />
-                </button>
+                {key === "interests" ? (
+                  <>
+                    <input
+                      value={inputs[key]?.name || ""}
+                      onChange={e => setInputs(prev => ({ ...prev, [key]: { ...prev[key], name: e.target.value } }))}
+                      placeholder="ชื่อหัตถการ"
+                      className="flex-1 px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    />
+                    <input
+                      value={inputs[key]?.price || ""}
+                      onChange={e => setInputs(prev => ({ ...prev, [key]: { ...prev[key], price: e.target.value } }))}
+                      placeholder="ราคา"
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      className="w-24 px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    />
+                    <button
+                      onClick={() => createItem(key)}
+                      className="px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex justify-center items-center"
+                    >
+                      <Plus className="w-5 h-5 sm:w-4 sm:h-4" />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <input
+                      value={inputs[key]?.name || ""}
+                      onChange={e => setInputs(prev => ({ ...prev, [key]: { name: e.target.value } }))}
+                      placeholder={`เพิ่ม${section.title}`}
+                      className="flex-1 px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    />
+                    <button
+                      onClick={() => createItem(key)}
+                      className="px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex justify-center items-center"
+                    >
+                      <Plus className="w-5 h-5 sm:w-4 sm:h-4" />
+                    </button>
+                  </>
+                )}
               </div>
 
               <div className="space-y-2">
                 {section.items.map(item => (
                   <div key={item.id} className="flex justify-between items-center px-3 py-3 border rounded-lg text-sm hover:bg-gray-50">
-                    <span>{item.name}</span>
+                    <span>
+                      {item.name} {key === "interests" && item.price != null ? ` ${item.price} บาท` : ""}
+                    </span>
                     <div className="flex gap-3">
                       <button onClick={() => openEditModal(key, item)} className="text-gray-400 hover:text-indigo-600">
                         <Pencil className="w-5 h-5 sm:w-4 sm:h-4" />
@@ -225,19 +261,25 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {createOpen && (
-        <Modal title="ยืนยันการสร้าง" onClose={() => setCreateOpen(false)} onConfirm={confirmCreate}>
-          ต้องการเพิ่ม <b>{inputs[currentSection!]}</b> ใช่หรือไม่?
-        </Modal>
-      )}
-
       {editOpen && (
-        <Modal title="แก้ไขชื่อ" onClose={() => setEditOpen(false)} onConfirm={confirmEdit}>
+        <Modal title="แก้ไขรายการ" onClose={() => setEditOpen(false)} onConfirm={confirmEdit}>
           <input
             value={editValue}
             onChange={e => setEditValue(e.target.value)}
-            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+            className="w-full px-3 py-2 mb-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+            placeholder="ชื่อ"
           />
+          {currentSection === "interests" && (
+            <input
+              value={editPrice}
+              onChange={e => setEditPrice(e.target.value)}
+              placeholder="ราคา"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+            />
+          )}
         </Modal>
       )}
 
@@ -250,7 +292,6 @@ export default function SettingsPage() {
   );
 }
 
-// ---------- Modal Component ----------
 function Modal({ title, children, onClose, onConfirm, danger }: { title: string; children: React.ReactNode; onClose: () => void; onConfirm: () => void; danger?: boolean }) {
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
