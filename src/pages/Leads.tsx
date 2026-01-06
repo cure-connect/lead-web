@@ -29,6 +29,9 @@ const LeadsPage: React.FC = () => {
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [leads, setLeads] = useState<Lead[]>([]);
 
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [leadToDelete, setLeadToDelete] = useState<Lead | null>(null);
+
   const fetchLeads = async () => {
     try {
       const res = await fetch(`${API_URL}/lead`, {
@@ -160,15 +163,20 @@ const LeadsPage: React.FC = () => {
     }
   };
 
+  const openDeleteModal = (lead: Lead) => {
+    setLeadToDelete(lead);
+    setIsDeleteModalOpen(true);
+  };
 
-  const handleDelete = async (id: string) => {
-    if (confirm("คุณต้องการลบข้อมูลนี้ใช่หรือไม่?")) {
-      await fetch(`${API_URL}/${id}`, {
-        method: "DELETE",
-        headers: { "x-api-key": API_KEY },
-      });
-      await fetchLeads();
-    }
+  const confirmDelete = async () => {
+    if (!leadToDelete) return;
+    await fetch(`${API_URL}/${leadToDelete.id}`, {
+      method: "DELETE",
+      headers: { "x-api-key": API_KEY },
+    });
+    await fetchLeads();
+    setIsDeleteModalOpen(false);
+    setLeadToDelete(null);
   };
 
   return (
@@ -238,7 +246,7 @@ const LeadsPage: React.FC = () => {
                         onClick={() => { setEditingLead(lead); setIsModalOpen(true); }}
                       />
                       <Trash2 className="w-4 h-4 text-red-600 cursor-pointer"
-                        onClick={() => handleDelete(lead.id)}
+                        onClick={() => openDeleteModal(lead)}
                       />
                     </td>
                   </tr>
@@ -259,6 +267,20 @@ const LeadsPage: React.FC = () => {
           onSave={handleSave}
           onClose={() => { setIsModalOpen(false); setEditingLead(null); }}
         />
+      </Modal>
+
+      <Modal
+        isOpen={isDeleteModalOpen}
+        onClose={() => { setIsDeleteModalOpen(false); setLeadToDelete(null); }}
+        title="ยืนยันการลบ"
+      >
+        <div className="mb-4 text-sm">
+          คุณต้องการลบ Lead <b>{leadToDelete?.name}</b> ใช่หรือไม่?
+        </div>
+        <div className="flex justify-end gap-2">
+          <button onClick={() => { setIsDeleteModalOpen(false); setLeadToDelete(null); }} className="px-4 py-2 border rounded-md text-sm">ยกเลิก</button>
+          <button onClick={confirmDelete} className="px-4 py-2 bg-red-600 text-white rounded-md text-sm">ลบ</button>
+        </div>
       </Modal>
     </div>
   );
