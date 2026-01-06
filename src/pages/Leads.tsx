@@ -23,7 +23,7 @@ const formatDateTime = (dateStr: string) => {
 };
 
 const LeadsPage: React.FC = () => {
-  const [selectedMonth, setSelectedMonth] = useState("2025-12");
+  const [selectedMonth, setSelectedMonth] = useState("2026-01");
   const [searchQuery, setSearchQuery] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
@@ -109,6 +109,7 @@ const LeadsPage: React.FC = () => {
   const handleSave = async (lead: Lead) => {
     try {
       const payload: any = {
+        clinic: { branch: lead.branch },
         patient: { name: lead.name, tel: lead.phone, lineId: lead.lineId || undefined },
         interests: lead.interest,
         referralChannel: lead.referralChannel,
@@ -145,6 +146,7 @@ const LeadsPage: React.FC = () => {
           body: JSON.stringify(payload),
         });
         if (!res.ok) {
+          console.log('error', payload)
           const err = await res.json();
           throw new Error(err.message || "Update lead failed");
         }

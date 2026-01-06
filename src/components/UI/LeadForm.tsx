@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { type Lead } from '../../types/index';
 
 interface LeadFormProps {
@@ -12,8 +12,13 @@ const steps = [
   { label: 'รายละเอียดนัดหมาย' },
 ];
 
+const API_BASE = import.meta.env.VITE_API_URL;
+const API_KEY = import.meta.env.VITE_API_KEY;
+
 const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
+
   const [step, setStep] = useState(1);
+  const [branches, setBranches] = useState<{ id: string, name: string }[]>([]);
   const [formData, setFormData] = useState({
     name: lead?.name || '',
     phone: lead?.phone || '',
@@ -27,6 +32,58 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
     appointmentTime: lead?.appointmentTime || '',
     note: lead?.note || ''
   });
+
+  useEffect(() => {
+  if (branches.length > 0 && !lead?.branch) {
+    setFormData(prev => ({ ...prev, branch: branches[0].name }));
+  }
+}, [branches, lead]);
+
+
+  const [interests, setInterests] = useState<{ id: string, name: string }[]>([]);
+  const [channels, setChannels] = useState<{ id: string, name: string }[]>([]);
+  const [admins, setAdmins] = useState<{ id: string, name: string }[]>([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const headers = { 'x-api-key': API_KEY };
+
+        const [interestRes, channelRes, adminRes, branchRes] = await Promise.all([
+          fetch(`${API_BASE}/setting/getinterest`, { headers }),
+          fetch(`${API_BASE}/setting/getchannel`, { headers }),
+          fetch(`${API_BASE}/setting/getadmin`, { headers }),
+          fetch(`${API_BASE}/setting/getbranch`, { headers }),
+        ]);
+
+        const interestJson = await interestRes.json();
+        setInterests(interestJson.data ?? interestJson);
+
+        const channelJson = await channelRes.json();
+        setChannels(channelJson.data ?? channelJson);
+
+        const adminJson = await adminRes.json();
+        setAdmins(adminJson.data ?? adminJson);
+
+        const branchJson = await branchRes.json();
+        setBranches(branchJson.data ?? branchJson);
+      } catch (err) {
+        console.error("Failed to load dropdown data", err);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  const validateStep1 = () => {
+    if (!formData.name.trim()) return "กรุณากรอกชื่อนามสกุล";
+    if (!formData.phone.trim()) return "กรุณากรอกเบอร์ติดต่อ";
+    if (!formData.interest) return "กรุณาเลือกความสนใจ";
+    if (!formData.referralChannel) return "กรุณาเลือกช่องทางที่รู้จักคลินิก";
+    if (!formData.admin) return "กรุณาเลือกแอดมิน";
+    if (!formData.branch || formData.branch === "0") return "กรุณาเลือกสาขา";
+    return null;
+  };
 
   const handleSubmit = () => {
     const now = new Date();
@@ -51,19 +108,16 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
     } as Lead);
   };
 
-
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center mb-8 relative">
         {steps.map((s, i) => (
           <div key={i} className="flex-1 flex flex-col items-center relative">
             {i !== 0 && (
-              <div className="absolute top-1/2 left-0 w-full h-1 bg-gray-200 -z-10" style={{ marginLeft: '-50%', width: '100%' }} />
+              <div className="absolute top-1/2 left-0 h-1 bg-gray-200 -z-10" style={{ marginLeft: '-50%', width: '100%' }} />
             )}
-            <div
-              className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold
-                ${step > i ? 'bg-indigo-600' : step === i + 1 ? 'bg-indigo-500' : 'bg-gray-300'}
-              `}
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold
+              ${step > i ? 'bg-indigo-600' : step === i + 1 ? 'bg-indigo-500' : 'bg-gray-300'}`}
             >
               {i + 1}
             </div>
@@ -79,10 +133,8 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
               <label className="block text-sm font-medium text-gray-700 mb-2">ชื่อนามสกุล *</label>
               <input
                 type="text"
-                value={`${formData.name}`}
-                onChange={(e) =>
-                  setFormData({ ...formData, name: e.target.value })
-                }
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
               />
             </div>
@@ -99,17 +151,14 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">ความสนใจ(หัตถกรรม) *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">ความสนใจ(หัตถการ) *</label>
               <select
                 value={formData.interest}
                 onChange={(e) => setFormData({ ...formData, interest: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
               >
                 <option value="">เลือกความสนใจ</option>
-                <option value="จัดฟันเหล็ก">จัดฟันเหล็ก</option>
-                <option value="จัดฟันใส">จัดฟันใส</option>
-                <option value="รากฟันเทียม">รากฟันเทียม</option>
-                <option value="วีเนียร์">วีเนียร์</option>
+                {interests.map(i => <option key={i.id} value={i.name}>{i.name}</option>)}
               </select>
             </div>
             <div>
@@ -120,11 +169,7 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
               >
                 <option value="">เลือกช่องทาง</option>
-                <option value="Facebook">Facebook</option>
-                <option value="Google">Google</option>
-                <option value="Line">Line</option>
-                <option value="Instagram">Instagram</option>
-                <option value="เพื่อนแนะนำ">เพื่อนแนะนำ</option>
+                {channels.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
               </select>
             </div>
           </div>
@@ -147,8 +192,7 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
               >
                 <option value="">เลือกแอดมิน</option>
-                <option value="Admin 1">Admin 1</option>
-                <option value="Admin 2">Admin 2</option>
+                {admins.map(a => <option key={a.id} value={a.name}>{a.name}</option>)}
               </select>
             </div>
           </div>
@@ -160,25 +204,22 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
               onChange={(e) => setFormData({ ...formData, branch: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
             >
-              <option value="">เลือกสาขา</option>
-              <option value="สาขา 1">สาขา 1</option>
-              <option value="สาขา 2">สาขา 2</option>
+              {branches.length === 0 && <option value="0" disabled>เลือกสาขา</option>}
+              {branches.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
             </select>
+
           </div>
 
           <div className="flex justify-end gap-3">
+            <button onClick={onClose} className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">ยกเลิก</button>
             <button
-              onClick={onClose}
-              className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-            >
-              ยกเลิก
-            </button>
-            <button
-              onClick={() => setStep(2)}
+              onClick={() => {
+                const error = validateStep1();
+                if (error) { alert(error); return; }
+                setStep(2);
+              }}
               className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
-            >
-              ถัดไป
-            </button>
+            >ถัดไป</button>
           </div>
         </div>
       )}
@@ -229,7 +270,7 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
           )}
 
           <div>
-            <label className="block text	sm font-medium text-gray-700 mb-2">รายละเอียดเพิ่มเติม</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">รายละเอียดเพิ่มเติม</label>
             <textarea
               value={formData.note}
               onChange={(e) => setFormData({ ...formData, note: e.target.value })}
@@ -239,25 +280,10 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
           </div>
 
           <div className="flex justify-between gap-3">
-            <button
-              onClick={() => setStep(1)}
-              className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-            >
-              ย้อนกลับ
-            </button>
+            <button onClick={() => setStep(1)} className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">ย้อนกลับ</button>
             <div className="flex gap-3">
-              <button
-                onClick={onClose}
-                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-              >
-                ยกเลิก
-              </button>
-              <button
-                onClick={handleSubmit}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
-              >
-                บันทึก
-              </button>
+              <button onClick={onClose} className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">ยกเลิก</button>
+              <button onClick={handleSubmit} className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700">บันทึก</button>
             </div>
           </div>
         </div>
