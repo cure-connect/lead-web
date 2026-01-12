@@ -1,13 +1,21 @@
-export type LeadStatus = "Pending" | "Scheduled";
+export type LeadStatus = "pending" | "scheduled" | "rescheduled" | "cancelled" | "arrived";
+
+export interface LeadInterest {
+  name: string;
+  price: string;
+  procedureId?: number | string;
+}
 
 export interface Lead {
+  _id: any;
   id: string;
 
   name: string
   phone: string;
   lineId: string;
 
-  interest: string;
+  interest?: LeadInterest[];
+  price: string;
   referralChannel: string;
   admin: string;
   branch: string;

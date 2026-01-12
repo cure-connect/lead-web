@@ -7,6 +7,26 @@ interface LeadFormProps {
   onClose: () => void;
 }
 
+type InterestFormValue = {
+  name: string;
+  price: string;
+};
+
+type LeadFormState = {
+  name: string;
+  phone: string;
+  interest: InterestFormValue;
+  referralChannel: string;
+  lineId: string;
+  admin: string;
+  branch: string;
+  status: string;
+  appointmentDate: string;
+  appointmentTime: string;
+  note: string;
+};
+
+
 const steps = [
   { label: 'ข้อมูลลูกค้า' },
   { label: 'รายละเอียดนัดหมาย' },
@@ -15,32 +35,37 @@ const steps = [
 const API_BASE = import.meta.env.VITE_API_URL;
 const API_KEY = import.meta.env.VITE_API_KEY;
 
+
 const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
 
   const [step, setStep] = useState(1);
   const [branches, setBranches] = useState<{ id: string, name: string }[]>([]);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<LeadFormState>({
     name: lead?.name || '',
     phone: lead?.phone || '',
-    interest: lead?.interest || '',
+    interest: {
+      name: lead?.interest?.[0]?.name || '',
+      price: lead?.interest?.[0]?.price || '0',
+    },
     referralChannel: lead?.referralChannel || '',
     lineId: lead?.lineId || '',
     admin: lead?.admin || '',
     branch: lead?.branch || '',
-    status: lead?.status === 'Scheduled' ? 'ทำนัด' : 'รอตัดสินใจ',
+    status: lead?.status === 'scheduled' ? 'ทำนัด' : 'pending',
     appointmentDate: lead?.appointmentDate || '',
     appointmentTime: lead?.appointmentTime || '',
-    note: lead?.note || ''
+    note: lead?.note || '',
   });
 
+
   useEffect(() => {
-  if (branches.length > 0 && !lead?.branch) {
-    setFormData(prev => ({ ...prev, branch: branches[0].name }));
-  }
-}, [branches, lead]);
+    if (branches.length > 0 && !lead?.branch) {
+      setFormData(prev => ({ ...prev, branch: branches[0].name }));
+    }
+  }, [branches, lead]);
 
 
-  const [interests, setInterests] = useState<{ id: string, name: string }[]>([]);
+  const [interests, setInterests] = useState<{ id: string, name: string, price: string }[]>([]);
   const [channels, setChannels] = useState<{ id: string, name: string }[]>([]);
   const [admins, setAdmins] = useState<{ id: string, name: string }[]>([]);
 
@@ -93,19 +118,19 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
     const createdAt = lead?.createdAt || `${buddhistYear}-${month}-${day}`;
 
     const backendStatus =
-      formData.status === 'ทำนัด' || formData.status === 'Scheduled'
-        ? 'Scheduled'
-        : 'Pending';
+      formData.status === 'ทำนัด' || formData.status === 'scheduled'
+        ? 'scheduled'
+        : 'pending';
 
     onSave({
       ...(lead || {}),
       ...formData,
       id: lead?.id || '',
       status: backendStatus,
-      appointmentDate: backendStatus === 'Scheduled' ? formData.appointmentDate : undefined,
-      appointmentTime: backendStatus === 'Scheduled' ? formData.appointmentTime : undefined,
+      appointmentDate: backendStatus === 'scheduled' ? formData.appointmentDate : undefined,
+      appointmentTime: backendStatus === 'scheduled' ? formData.appointmentTime : undefined,
       createdAt,
-    } as Lead);
+    } as unknown as Lead);
   };
 
   return (
@@ -153,12 +178,27 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">ความสนใจ(หัตถการ) *</label>
               <select
-                value={formData.interest}
-                onChange={(e) => setFormData({ ...formData, interest: e.target.value })}
+                value={formData.interest.name}
+                onChange={(e) => {
+                  const selected = interests.find(i => i.name === e.target.value);
+                  if (!selected) return;
+
+                  setFormData({
+                    ...formData,
+                    interest: {
+                      name: selected.name,
+                      price: selected.price
+                    }
+                  });
+                }}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
               >
                 <option value="">เลือกความสนใจ</option>
-                {interests.map(i => <option key={i.id} value={i.name}>{i.name}</option>)}
+                {interests.map(i => (
+                  <option key={i.id} value={i.name}>
+                    {i.name}  ราคา {i.price} บาท
+                  </option>
+                ))}
               </select>
             </div>
             <div>

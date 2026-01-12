@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 50">
+  <defs>
+    <linearGradient id="mainGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1479FF"/>
+      <stop offset="100%" style="stop-color:#0066E6"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Small Icon with circular background -->
+  <g transform="translate(5, 1)">
+    <!-- Circular background -->
+    <circle cx="24" cy="24" r="24" fill="#1479FF" opacity="0.08"/>
+    
+    <circle cx="24" cy="24" r="16" fill="url(#mainGrad)"/>
+    <circle cx="24" cy="20" r="5.5" fill="white"/>
+    <ellipse cx="24" cy="31" rx="8" ry="5" fill="white"/>
+    
+    <circle cx="7" cy="10" r="4" fill="#1479FF" opacity="0.7"/>
+    <circle cx="41" cy="10" r="4" fill="#1479FF" opacity="0.7"/>
+    <circle cx="7" cy="38" r="3.5" fill="#1479FF" opacity="0.5"/>
+    <circle cx="41" cy="38" r="3.5" fill="#1479FF" opacity="0.5"/>
+  </g>
+  
+  <text x="62" y="23" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="700" fill="#1479FF">LEADS</text>
+  <text x="62" y="40" font-family="Inter, Arial, sans-serif" font-size="9" font-weight="500" fill="#94A3B8" letter-spacing="1.5">BY CUREDENT</text>
+</svg>
