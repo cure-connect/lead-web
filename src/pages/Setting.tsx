@@ -187,7 +187,7 @@ export default function SettingsPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
           {Object.entries(sections).map(([key, section]) => (
-            <div key={key} className="bg-white border rounded-xl p-4 sm:p-6">
+            <div key={key} className="bg-white shadow rounded-xl p-4 sm:p-6">
               <div className="flex items-center gap-4 mb-5">
                 <div className={`${section.iconBg} p-3 rounded-full`}>{section.icon}</div>
                 <div>
@@ -203,7 +203,7 @@ export default function SettingsPage() {
                       value={inputs[key]?.name || ""}
                       onChange={e => setInputs(prev => ({ ...prev, [key]: { ...prev[key], name: e.target.value } }))}
                       placeholder="ชื่อหัตถการ"
-                      className="flex-1 px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      className="flex-1 px-3 py-2 shadow rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                     />
                     <input
                       value={inputs[key]?.price || ""}
@@ -212,7 +212,7 @@ export default function SettingsPage() {
                       type="text"
                       inputMode="numeric"
                       pattern="[0-9]*"
-                      className="w-24 px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      className="w-24 px-3 py-2 shadow rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                     />
                     <button
                       onClick={() => createItem(key)}
@@ -227,7 +227,7 @@ export default function SettingsPage() {
                       value={inputs[key]?.name || ""}
                       onChange={e => setInputs(prev => ({ ...prev, [key]: { name: e.target.value } }))}
                       placeholder={`เพิ่ม${section.title}`}
-                      className="flex-1 px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      className="flex-1 px-3 py-2 shadow rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                     />
                     <button
                       onClick={() => createItem(key)}
@@ -241,7 +241,7 @@ export default function SettingsPage() {
 
               <div className="space-y-2">
                 {section.items.map(item => (
-                  <div key={item.id} className="flex justify-between items-center px-3 py-3 border rounded-lg text-sm hover:bg-gray-50">
+                  <div key={item.id} className="flex justify-between items-center px-3 py-3 shadow rounded-lg text-sm hover:bg-gray-50">
                     <span>
                       {item.name} {key === "interests" && item.price != null ? ` ${item.price} บาท` : ""}
                     </span>

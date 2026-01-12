@@ -54,6 +54,7 @@ const LeadsPage: React.FC = () => {
   const [leadToDelete, setLeadToDelete] = useState<Lead | null>(null);
   const [statusModalLead, setStatusModalLead] = useState<Lead | null>(null);
 
+
   const fetchLeads = async () => {
     try {
       const res = await fetch(`${API_URL}/lead`, {
@@ -101,6 +102,7 @@ const LeadsPage: React.FC = () => {
   useEffect(() => {
     fetchLeads();
   }, []);
+
 
   const filteredLeads = useMemo(() => {
     const [year, month] = selectedMonth.split("-");
@@ -151,9 +153,7 @@ const LeadsPage: React.FC = () => {
         createdBy: lead.admin,
       };
 
-      console.log('leadstatus', lead.status)
-      
-      if(lead.status === "pending") {
+      if (lead.status === "pending") {
         payload.appointments = {
           status: "pending",
           date: null
@@ -179,9 +179,6 @@ const LeadsPage: React.FC = () => {
         }
       }
 
-      console.log('payload', payload)
-      console.log('payloadappointments', payload.appointments)
-
       if (!editingLead) {
         payload.clinic = { name: lead.name, branch: lead.branch || "Bangkok" };
         const res = await fetch(`${API_URL}/createlead`, {
@@ -200,7 +197,6 @@ const LeadsPage: React.FC = () => {
           body: JSON.stringify(payload),
         });
         if (!res.ok) {
-          console.log('error', payload)
           const err = await res.json();
           throw new Error(err.message || "Update lead failed");
         }
@@ -271,7 +267,7 @@ const LeadsPage: React.FC = () => {
           </div>
 
           <div className="bg-white rounded-lg shadow">
-            <div className="border-b">
+            <div className="shadow">
               <div className="flex gap-4 px-6">
                 <button
                   onClick={() => setActiveTab("notScheduled")}
@@ -294,15 +290,15 @@ const LeadsPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="p-6 border-b flex gap-4 max-md:flex-col">
+            <div className="p-6 shadow flex gap-4 max-md:flex-col">
               <input
                 type="month"
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
-                className="px-4 py-2 border rounded-md"
+                className="px-4 py-2 shadow rounded-md"
               />
 
-              <div className="flex items-center w-full border rounded-md px-3">
+              <div className="flex items-center w-full shadow rounded-md px-3">
                 <Search className="w-5 h-5 text-gray-400 mr-2" />
                 <input
                   value={searchQuery}
@@ -343,7 +339,7 @@ const LeadsPage: React.FC = () => {
                   </tr>
                 </thead>
 
-                <tbody className="divide-y">
+                <tbody className="border-t">
                   {filteredLeads.map((lead) => (
                     <tr
                       key={lead.id}
@@ -523,7 +519,8 @@ const StatusModal = ({
   >([{ name: "", price: "0", procedureId: undefined }]);
   const [paymentMethod, setPaymentMethod] = useState("");
   const [installmentMonths, setInstallmentMonths] = useState<number>(0);
-  const [monthlyPayment, setMonthlyPayment] = useState<number>(0);
+  const [monthlyPayments, setMonthlyPayments] = useState<number[]>([]);
+
 
   const totalAmount = procedures.reduce(
     (sum, p) => sum + (parseFloat(p.price) || 0),
@@ -552,6 +549,15 @@ const StatusModal = ({
     fetchProcedures();
   }, []);
 
+  useEffect(() => {
+    if (installmentMonths > 0) {
+      setMonthlyPayments((prev) =>
+        Array.from({ length: installmentMonths }, (_, i) => prev[i] || 0)
+      );
+    } else {
+      setMonthlyPayments([]);
+    }
+  }, [installmentMonths]);
 
   const addProcedure = () => {
     setProcedures([...procedures, { name: "", price: "0", procedureId: undefined }]);
@@ -584,8 +590,10 @@ const StatusModal = ({
           payments = {
             method: "installment",
             amount: totalAmount,
-            months: installmentMonths,
-            monthlyAmount: monthlyPayment,
+            installment: {
+              months: installmentMonths,
+              monthlyAmount: monthlyPayments,
+            }
           };
         } else {
           payments = {
@@ -621,8 +629,6 @@ const StatusModal = ({
       } else if (selectedStatus === "cancelled") {
         payload.appointments.date = new Date().toISOString();
       }
-
-      console.log("payload", payload);
 
       const res = await fetch(`${API_URL}/${lead.id}`, {
         method: "PATCH",
@@ -785,7 +791,7 @@ const StatusModal = ({
               </div>
 
               {paymentMethod === "installment" && (
-                <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium mb-2">
                       จำนวนเดือน
@@ -804,23 +810,30 @@ const StatusModal = ({
                     </select>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium mb-2">
-                      ต่อเดือน (บาท)
-                    </label>
-                    <input
-                      type="number"
-                      value={monthlyPayment || ""}
-                      onChange={(e) =>
-                        setMonthlyPayment(
-                          parseFloat(e.target.value) || 0
-                        )
-                      }
-                      className="w-full px-3 py-2 border rounded-md"
-                    />
-                  </div>
+                  {monthlyPayments.length > 0 && (
+                    <div className="grid grid-cols-2 gap-4">
+                      {monthlyPayments.map((value, index) => (
+                        <div key={index}>
+                          <label className="block text-sm font-medium mb-2">
+                            เดือนที่ {index + 1} (บาท)
+                          </label>
+                          <input
+                            type="number"
+                            value={value || ""}
+                            onChange={(e) => {
+                              const newPayments = [...monthlyPayments];
+                              newPayments[index] = parseFloat(e.target.value) || 0;
+                              setMonthlyPayments(newPayments);
+                            }}
+                            className="w-full px-3 py-2 border rounded-md"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
+
             </div>
           )}
 

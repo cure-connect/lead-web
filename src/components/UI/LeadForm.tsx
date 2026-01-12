@@ -196,7 +196,7 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
                 <option value="">เลือกความสนใจ</option>
                 {interests.map(i => (
                   <option key={i.id} value={i.name}>
-                    {i.name}  ราคา {i.price} บาท
+                    {i.name}
                   </option>
                 ))}
               </select>
