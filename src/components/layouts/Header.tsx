@@ -1,12 +1,12 @@
 import React, { useState } from "react";
-import logo from '../../assets/leads-logo.svg';
+import logo from "../../assets/leads-logo.svg";
 import {
-  User,
   LayoutDashboard,
   Settings,
   Users,
   Menu,
   X,
+  LogOut,
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
@@ -14,7 +14,7 @@ import { useAuth } from "../../context/AuthContext";
 const Header: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { username } = useAuth();
+  const { user, logout } = useAuth();
   const [openMenu, setOpenMenu] = useState(false);
 
   const currentPage = location.pathname.replace("/", "") || "dashboard";
@@ -30,14 +30,9 @@ const Header: React.FC = () => {
       path: "leads",
       icon: <Users className="w-4 h-4" />,
     },
-    // {
-    //   name: "Admin",
-    //   path: "admin",
-    //   icon: <User className="w-4 h-4" />,
-    // },
     {
       name: "Settings",
-      path: "setting",
+      path: "settings",
       icon: <Settings className="w-4 h-4" />,
     },
   ];
@@ -47,11 +42,17 @@ const Header: React.FC = () => {
     setOpenMenu(false);
   };
 
+  const handleLogout = () => {
+    localStorage.clear();
+    logout();
+    navigate("/login");
+  };
+
   return (
     <header className="bg-white shadow">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center py-4">
-          <div className="flex items-center">
+          <div className="flex items-center gap-3">
             <img
               src={logo}
               alt="Leads Logo"
@@ -62,17 +63,18 @@ const Header: React.FC = () => {
             </span>
           </div>
 
-
+          {/* Desktop */}
           <div className="hidden md:flex items-center space-x-6">
             <nav className="flex space-x-4">
               {navItems.map((item) => (
                 <button
                   key={item.path}
                   onClick={() => navigate(`/${item.path}`)}
-                  className={`px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${currentPage === item.path
+                  className={`px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                    currentPage === item.path
                       ? "text-indigo-600 bg-indigo-50"
                       : "text-gray-600 hover:text-gray-900"
-                    }`}
+                  }`}
                 >
                   {item.icon}
                   {item.name}
@@ -80,15 +82,22 @@ const Header: React.FC = () => {
               ))}
             </nav>
 
-            <div className="px-3 py-2 text-sm font-medium text-gray-700">
-              {username ? (
-                `Hi, ${username}`
-              ) : (
-                <User className="w-5 h-5 text-indigo-600" />
-              )}
+            <div className="flex items-center gap-4">
+              <span className="text-sm font-medium text-gray-700">
+                Hi, {user?.username}
+              </span>
+
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-1 text-sm text-red-600 hover:text-red-700"
+              >
+                <LogOut className="w-4 h-4" />
+                Logout
+              </button>
             </div>
           </div>
 
+          {/* Mobile toggle */}
           <button
             className="md:hidden p-2"
             onClick={() => setOpenMenu(!openMenu)}
@@ -101,28 +110,36 @@ const Header: React.FC = () => {
           </button>
         </div>
 
+        {/* Mobile menu */}
         {openMenu && (
-          <div className="md:hidden bg-gray-50 border-t py-3 space-y-1 animate-fadein">
+          <div className="md:hidden bg-gray-50 border-t py-3 space-y-1">
             {navItems.map((item) => (
               <button
                 key={item.path}
                 onClick={() => navigateAndClose(item.path)}
-                className={`w-full flex items-center gap-3 px-4 py-3 text-left text-sm font-medium rounded-md ${currentPage === item.path
+                className={`w-full flex items-center gap-3 px-4 py-3 text-left text-sm font-medium rounded-md ${
+                  currentPage === item.path
                     ? "text-indigo-600 bg-indigo-100"
                     : "text-gray-700 hover:bg-gray-200"
-                  }`}
+                }`}
               >
                 {item.icon}
                 {item.name}
               </button>
             ))}
 
-            <div className="px-4 py-3 text-gray-700 text-sm">
-              {username ? (
-                `Hi, ${username}`
-              ) : (
-                <User className="w-5 h-5 text-indigo-600" />
-              )}
+            <div className="px-4 py-3 flex items-center justify-between">
+              <span className="text-sm text-gray-700">
+                Hi, {user?.username}
+              </span>
+
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-2 text-sm text-red-600"
+              >
+                <LogOut className="w-4 h-4" />
+                Logout
+              </button>
             </div>
           </div>
         )}
