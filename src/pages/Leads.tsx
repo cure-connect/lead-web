@@ -7,6 +7,15 @@ import LeadForm from "../components/UI/LeadForm";
 const API_URL = import.meta.env.VITE_API_URL;
 const API_KEY = import.meta.env.VITE_API_KEY;
 
+const getAuthHeaders = () => {
+  const token = localStorage.getItem("token");
+  return {
+    "Content-Type": "application/json",
+    "x-api-key": API_KEY,
+    "Authorization": `Bearer ${token}`
+  };
+};
+
 const statusLabel: Record<string, string> = {
   pending: "รอตัดสินใจ",
   scheduled: "ทำนัด",
@@ -58,7 +67,7 @@ const LeadsPage: React.FC = () => {
   const fetchLeads = async () => {
     try {
       const res = await fetch(`${API_URL}/lead`, {
-        headers: { "Content-Type": "application/json", "x-api-key": API_KEY },
+        headers: getAuthHeaders(),
       });
 
       if (!res.ok) throw new Error("Fetch leads failed");
@@ -183,7 +192,7 @@ const LeadsPage: React.FC = () => {
         payload.clinic = { name: lead.name, branch: lead.branch || "Bangkok" };
         const res = await fetch(`${API_URL}/createlead`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", "x-api-key": API_KEY },
+          headers: getAuthHeaders(),
           body: JSON.stringify(payload),
         });
         if (!res.ok) {
@@ -193,7 +202,7 @@ const LeadsPage: React.FC = () => {
       } else {
         const res = await fetch(`${API_URL}/${lead.id}`, {
           method: "PATCH",
-          headers: { "Content-Type": "application/json", "x-api-key": API_KEY },
+          headers: getAuthHeaders(),
           body: JSON.stringify(payload),
         });
         if (!res.ok) {
@@ -219,7 +228,7 @@ const LeadsPage: React.FC = () => {
     if (!leadToDelete) return;
     await fetch(`${API_URL}/${leadToDelete.id}`, {
       method: "DELETE",
-      headers: { "x-api-key": API_KEY },
+      headers: getAuthHeaders(),
     });
     await fetchLeads();
     setIsDeleteModalOpen(false);
@@ -340,7 +349,18 @@ const LeadsPage: React.FC = () => {
                 </thead>
 
                 <tbody className="border-t">
-                  {filteredLeads.map((lead) => (
+                  {filteredLeads.length === 0 ? (
+                    <tr>
+                      <td colSpan={activeTab === "scheduled" ? 7 : 4} className="px-6 py-16 text-center">
+                        <div className="flex flex-col items-center justify-center text-gray-400">
+                          <Users className="w-12 h-12 mb-4 opacity-50" />
+                          <p className="text-lg font-medium text-gray-500">ยังไม่มีข้อมูล</p>
+                          <p className="text-sm mt-1">กดปุ่ม "เพิ่ม Lead" เพื่อเริ่มต้นเพิ่มข้อมูล</p>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredLeads.map((lead) => (
                     <tr
                       key={lead.id}
                       className="hover:bg-gray-50 transition-colors"
@@ -427,7 +447,8 @@ const LeadsPage: React.FC = () => {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                  ))
+                  )}
                 </tbody>
               </table>
 
@@ -459,19 +480,30 @@ const LeadsPage: React.FC = () => {
         />
       </Modal>
 
-      <Modal
-        isOpen={isDeleteModalOpen}
-        onClose={() => { setIsDeleteModalOpen(false); setLeadToDelete(null); }}
-        title="ยืนยันการลบ"
-      >
-        <div className="mb-4 text-sm">
-          คุณต้องการลบ Lead <b>{leadToDelete?.name}</b> ใช่หรือไม่?
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl w-[90%] max-w-sm p-6">
+            <h3 className="font-semibold text-lg mb-4">ยืนยันการลบ</h3>
+            <p className="text-sm text-gray-600 mb-6">
+              ต้องการลบ <b>{leadToDelete?.name}</b> ใช่หรือไม่?
+            </p>
+            <div className="flex justify-end gap-2">
+              <button 
+                onClick={() => { setIsDeleteModalOpen(false); setLeadToDelete(null); }} 
+                className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50"
+              >
+                ยกเลิก
+              </button>
+              <button 
+                onClick={confirmDelete} 
+                className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700"
+              >
+                ลบ
+              </button>
+            </div>
+          </div>
         </div>
-        <div className="flex justify-end gap-2">
-          <button onClick={() => { setIsDeleteModalOpen(false); setLeadToDelete(null); }} className="px-4 py-2 border rounded-md text-sm">ยกเลิก</button>
-          <button onClick={confirmDelete} className="px-4 py-2 bg-red-600 text-white rounded-md text-sm">ลบ</button>
-        </div>
-      </Modal>
+      )}
     </>
   );
 };
@@ -515,7 +547,7 @@ const StatusModal = ({
   const [newAppointmentDate, setNewAppointmentDate] = useState("");
   const [newAppointmentTime, setNewAppointmentTime] = useState("");
   const [procedures, setProcedures] = useState<
-    Array<{ name: string; price: string; procedureId?: number }>
+    Array<{ name: string; price: string; procedureId?: string }>
   >([{ name: "", price: "0", procedureId: undefined }]);
   const [paymentMethod, setPaymentMethod] = useState("");
   const [installmentMonths, setInstallmentMonths] = useState<number>(0);
@@ -535,10 +567,10 @@ const StatusModal = ({
       try {
         setLoading(true);
         const res = await fetch(
-          `${API_URL}/setting/getinterest`, { headers: { "Content-Type": "application/json", "x-api-key": API_KEY } }
+          `${API_URL}/setting/gettype`, { headers: getAuthHeaders() }
         );
         const data = await res.json();
-        setProcedureOptions(data.data);
+        setProcedureOptions(data.interests ?? []);
       } catch (error) {
         console.error("Failed to fetch procedures", error);
       } finally {
@@ -579,13 +611,15 @@ const StatusModal = ({
     try {
       if (!selectedStatus) return;
 
-      const totalAmount = procedures.reduce(
+      const validProcedures = procedures.filter(p => p.name && p.price);
+
+      const totalAmount = validProcedures.reduce(
         (sum, p) => sum + (parseFloat(p.price) || 0),
         0
       );
 
       let payments: any = undefined;
-      if (paymentMethod) {
+      if (paymentMethod && totalAmount > 0) {
         if (paymentMethod === "installment") {
           payments = {
             method: "installment",
@@ -604,15 +638,17 @@ const StatusModal = ({
       }
 
       const payload: any = {
-        interests: procedures.map((p) => ({
-          name: p.name,
-          price: p.price,
-          procedureId: p.procedureId,
-        })),
         appointments: {
           status: selectedStatus,
         },
-        payments,
+        ...(validProcedures.length > 0 ? {
+          interests: validProcedures.map((p) => ({
+            name: p.name,
+            price: p.price,
+            ...(p.procedureId ? { procedureId: p.procedureId } : {}),
+          }))
+        } : {}),
+        ...(payments ? { payments } : {}),
       };
 
       if (selectedStatus === "scheduled") {
@@ -632,10 +668,7 @@ const StatusModal = ({
 
       const res = await fetch(`${API_URL}/${lead.id}`, {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": API_KEY,
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify(payload),
       });
 
@@ -718,12 +751,12 @@ const StatusModal = ({
                       const selectedId = e.target.value;
 
                       const selected = procedureOptions.find(
-                        (p) => String(p.id) === selectedId
+                        (p) => String(p._id) === selectedId
                       );
 
                       if (!selected) return;
 
-                      updateProcedure(index, "procedureId", String(selected.id));
+                      updateProcedure(index, "procedureId", String(selected._id));
                       updateProcedure(index, "name", selected.name);
                       updateProcedure(index, "price", selected.price);
                     }}
@@ -734,7 +767,7 @@ const StatusModal = ({
                     </option>
 
                     {procedureOptions.map((option) => (
-                      <option key={option.id} value={String(option.id)}>
+                      <option key={option._id} value={String(option._id)}>
                         {option.name}
                       </option>
                     ))}

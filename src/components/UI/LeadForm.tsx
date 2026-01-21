@@ -35,11 +35,20 @@ const steps = [
 const API_BASE = import.meta.env.VITE_API_URL;
 const API_KEY = import.meta.env.VITE_API_KEY;
 
+const getAuthHeaders = () => {
+  const token = localStorage.getItem("token");
+  return {
+    "Content-Type": "application/json",
+    "x-api-key": API_KEY,
+    "Authorization": `Bearer ${token}`
+  };
+};
+
 
 const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
 
   const [step, setStep] = useState(1);
-  const [branches, setBranches] = useState<{ id: string, name: string }[]>([]);
+  const [branches, setBranches] = useState<{ _id: string, name: string }[]>([]);
   const [formData, setFormData] = useState<LeadFormState>({
     name: lead?.name || '',
     phone: lead?.phone || '',
@@ -65,33 +74,22 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
   }, [branches, lead]);
 
 
-  const [interests, setInterests] = useState<{ id: string, name: string, price: string }[]>([]);
-  const [channels, setChannels] = useState<{ id: string, name: string }[]>([]);
-  const [admins, setAdmins] = useState<{ id: string, name: string }[]>([]);
+  const [interests, setInterests] = useState<{ _id: string, name: string, price: string }[]>([]);
+  const [channels, setChannels] = useState<{ _id: string, name: string }[]>([]);
+  const [admins, setAdmins] = useState<{ _id: string, name: string }[]>([]);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const headers = { 'x-api-key': API_KEY };
+        const res = await fetch(`${API_BASE}/setting/gettype`, { 
+          headers: getAuthHeaders() 
+        });
+        const json = await res.json();
 
-        const [interestRes, channelRes, adminRes, branchRes] = await Promise.all([
-          fetch(`${API_BASE}/setting/getinterest`, { headers }),
-          fetch(`${API_BASE}/setting/getchannel`, { headers }),
-          fetch(`${API_BASE}/setting/getadmin`, { headers }),
-          fetch(`${API_BASE}/setting/getbranch`, { headers }),
-        ]);
-
-        const interestJson = await interestRes.json();
-        setInterests(interestJson.data ?? interestJson);
-
-        const channelJson = await channelRes.json();
-        setChannels(channelJson.data ?? channelJson);
-
-        const adminJson = await adminRes.json();
-        setAdmins(adminJson.data ?? adminJson);
-
-        const branchJson = await branchRes.json();
-        setBranches(branchJson.data ?? branchJson);
+        setInterests(json.interests ?? []);
+        setChannels(json.channels ?? []);
+        setAdmins(json.admins ?? []);
+        setBranches(json.branches ?? []);
       } catch (err) {
         console.error("Failed to load dropdown data", err);
       }
@@ -195,7 +193,7 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
               >
                 <option value="">เลือกความสนใจ</option>
                 {interests.map(i => (
-                  <option key={i.id} value={i.name}>
+                  <option key={i._id} value={i.name}>
                     {i.name}
                   </option>
                 ))}
@@ -209,7 +207,7 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
               >
                 <option value="">เลือกช่องทาง</option>
-                {channels.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                {channels.map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
               </select>
             </div>
           </div>
@@ -232,7 +230,7 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
               >
                 <option value="">เลือกแอดมิน</option>
-                {admins.map(a => <option key={a.id} value={a.name}>{a.name}</option>)}
+                {admins.map(a => <option key={a._id} value={a.name}>{a.name}</option>)}
               </select>
             </div>
           </div>
@@ -245,7 +243,7 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
             >
               {branches.length === 0 && <option value="0" disabled>เลือกสาขา</option>}
-              {branches.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
+              {branches.map(b => <option key={b._id} value={b.name}>{b.name}</option>)}
             </select>
 
           </div>
