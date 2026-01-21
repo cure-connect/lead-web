@@ -84,7 +84,7 @@ const Header: React.FC = () => {
 
             <div className="flex items-center gap-4">
               <span className="text-sm font-medium text-gray-700">
-                Hi, {user?.username}
+                Hi, {user?.clinicName}
               </span>
 
               <button
