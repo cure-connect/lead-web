@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 
 interface Item {
-  id: number;
+  _id: string;
   name: string;
   price?: number;
 }
@@ -19,45 +19,28 @@ interface SectionData {
   title: string;
   icon: React.ReactNode;
   iconBg: string;
+  type: string;
   items: Item[];
 }
 
 const BASE_URL = import.meta.env.VITE_API_URL;
 const API_KEY = import.meta.env.VITE_API_KEY;
 
-const API_MAP = {
-  admins: {
-    type: "admin",
-    get: "/setting/getadmin",
-    edit: (id: number) => `/setting/editadmin/${id}`,
-    delete: (id: number) => `/setting/deleteadmin/${id}`
-  },
-  interests: {
-    type: "interest",
-    get: "/setting/getinterest",
-    edit: (id: number) => `/setting/editinterest/${id}`,
-    delete: (id: number) => `/setting/deleteinterest/${id}`
-  },
-  branches: {
-    type: "branch",
-    get: "/setting/getbranch",
-    edit: (id: number) => `/setting/editbranch/${id}`,
-    delete: (id: number) => `/setting/deletebranch/${id}`
-  },
-  channels: {
-    type: "channel",
-    get: "/setting/getchannel",
-    edit: (id: number) => `/setting/editchannel/${id}`,
-    delete: (id: number) => `/setting/deletechannel/${id}`
-  }
+const getAuthHeaders = () => {
+  const token = localStorage.getItem("token");
+  return {
+    "Content-Type": "application/json",
+    "x-api-key": API_KEY,
+    "Authorization": `Bearer ${token}`
+  };
 };
 
 export default function SettingsPage() {
   const [sections, setSections] = useState<Record<string, SectionData>>({
-    admins: { title: "แอดมิน", icon: <Users className="w-5 h-5 text-indigo-600" />, iconBg: "bg-indigo-100", items: [] },
-    interests: { title: "หัตถการ", icon: <Star className="w-5 h-5 text-green-600" />, iconBg: "bg-green-100", items: [] },
-    branches: { title: "สาขา", icon: <Store className="w-5 h-5 text-blue-600" />, iconBg: "bg-blue-100", items: [] },
-    channels: { title: "ช่องทางที่รู้จัก", icon: <Radio className="w-5 h-5 text-purple-600" />, iconBg: "bg-purple-100", items: [] }
+    admins: { title: "แอดมิน", type: "admin", icon: <Users className="w-5 h-5 text-indigo-600" />, iconBg: "bg-indigo-100", items: [] },
+    interests: { title: "หัตถการ", type: "interest", icon: <Star className="w-5 h-5 text-green-600" />, iconBg: "bg-green-100", items: [] },
+    branches: { title: "สาขา", type: "branch", icon: <Store className="w-5 h-5 text-blue-600" />, iconBg: "bg-blue-100", items: [] },
+    channels: { title: "ช่องทางที่รู้จัก", type: "channel", icon: <Radio className="w-5 h-5 text-purple-600" />, iconBg: "bg-purple-100", items: [] }
   });
 
   const [inputs, setInputs] = useState<Record<string, { name: string; price?: string }>>({});
@@ -70,36 +53,48 @@ export default function SettingsPage() {
   const [editPrice, setEditPrice] = useState<string>("");
 
   useEffect(() => {
-    Object.entries(API_MAP).forEach(async ([key, api]) => {
+    const fetchData = async () => {
       try {
-        const res = await fetch(`${BASE_URL}${api.get}`, {
-          headers: { "x-api-key": API_KEY }
+        const res = await fetch(`${BASE_URL}/setting/gettype`, {
+          method: "GET",
+          headers: getAuthHeaders()
         });
         const json = await res.json();
+        
         setSections(prev => ({
           ...prev,
-          [key]: { ...prev[key], items: json.data ?? json }
+          admins: { ...prev.admins, items: json.admins ?? [] },
+          interests: { ...prev.interests, items: json.interests ?? [] },
+          branches: { ...prev.branches, items: json.branches ?? [] },
+          channels: { ...prev.channels, items: json.channels ?? [] },
         }));
       } catch (err) {
-        console.error("Failed to load", key, err);
+        console.error("Failed to load settings", err);
       }
-    });
+    };
+    fetchData();
   }, []);
 
   const createItem = async (sectionKey: string) => {
     const inputData = inputs[sectionKey];
-    if (!inputData?.name?.trim() || (sectionKey === "interests" && !inputData.price?.trim())) return;
+    const section = sections[sectionKey];
+    
+    if (!inputData?.name?.trim()) return;
+    if (sectionKey === "interests" && !inputData.price?.trim()) return;
 
-    const api = API_MAP[sectionKey as keyof typeof API_MAP];
-    const payload: any = { type: api.type, name: inputData.name };
+    const payload: Record<string, unknown> = { 
+      type: section.type, 
+      name: inputData.name.trim() 
+    };
+    
     if (sectionKey === "interests") {
       payload.price = parseFloat(inputData.price!);
     }
 
     try {
-      const res = await fetch(`${BASE_URL}/setting/create`, {
+      const res = await fetch(`${BASE_URL}/setting/createsetting`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-api-key": API_KEY },
+        headers: getAuthHeaders(),
         body: JSON.stringify(payload)
       });
       const json = await res.json();
@@ -125,17 +120,21 @@ export default function SettingsPage() {
 
   const confirmEdit = async () => {
     if (!currentSection || !currentItem) return;
-    const api = API_MAP[currentSection as keyof typeof API_MAP];
+    const section = sections[currentSection];
 
-    const payload: any = { name: editValue };
+    const payload: Record<string, unknown> = { 
+      type: section.type,
+      name: editValue.trim() 
+    };
+    
     if (currentSection === "interests") {
       payload.price = parseFloat(editPrice);
     }
 
     try {
-      await fetch(`${BASE_URL}${api.edit(currentItem.id)}`, {
+      await fetch(`${BASE_URL}/setting/editsetting/${currentItem._id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", "x-api-key": API_KEY },
+        headers: getAuthHeaders(),
         body: JSON.stringify(payload)
       });
 
@@ -144,7 +143,9 @@ export default function SettingsPage() {
         [currentSection]: {
           ...prev[currentSection],
           items: prev[currentSection].items.map(i =>
-            i.id === currentItem.id ? { ...i, name: editValue, price: currentSection === "interests" ? parseFloat(editPrice) : i.price } : i
+            i._id === currentItem._id 
+              ? { ...i, name: editValue, price: currentSection === "interests" ? parseFloat(editPrice) : i.price } 
+              : i
           )
         }
       }));
@@ -163,16 +164,19 @@ export default function SettingsPage() {
 
   const confirmDelete = async () => {
     if (!currentSection || !currentItem) return;
-    const api = API_MAP[currentSection as keyof typeof API_MAP];
 
     try {
-      await fetch(`${BASE_URL}${api.delete(currentItem.id)}`, {
+      await fetch(`${BASE_URL}/setting/deletesetting/${currentItem._id}`, {
         method: "DELETE",
-        headers: { "x-api-key": API_KEY }
+        headers: getAuthHeaders()
       });
+      
       setSections(prev => ({
         ...prev,
-        [currentSection]: { ...prev[currentSection], items: prev[currentSection].items.filter(i => i.id !== currentItem.id) }
+        [currentSection]: { 
+          ...prev[currentSection], 
+          items: prev[currentSection].items.filter(i => i._id !== currentItem._id) 
+        }
       }));
       setDeleteOpen(false);
     } catch (err) {
@@ -203,7 +207,7 @@ export default function SettingsPage() {
                       value={inputs[key]?.name || ""}
                       onChange={e => setInputs(prev => ({ ...prev, [key]: { ...prev[key], name: e.target.value } }))}
                       placeholder="ชื่อหัตถการ"
-                      className="flex-1 px-3 py-2 shadow rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                     />
                     <input
                       value={inputs[key]?.price || ""}
@@ -212,7 +216,7 @@ export default function SettingsPage() {
                       type="text"
                       inputMode="numeric"
                       pattern="[0-9]*"
-                      className="w-24 px-3 py-2 shadow rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      className="w-24 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                     />
                     <button
                       onClick={() => createItem(key)}
@@ -227,7 +231,7 @@ export default function SettingsPage() {
                       value={inputs[key]?.name || ""}
                       onChange={e => setInputs(prev => ({ ...prev, [key]: { name: e.target.value } }))}
                       placeholder={`เพิ่ม${section.title}`}
-                      className="flex-1 px-3 py-2 shadow rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                     />
                     <button
                       onClick={() => createItem(key)}
@@ -241,9 +245,9 @@ export default function SettingsPage() {
 
               <div className="space-y-2">
                 {section.items.map(item => (
-                  <div key={item.id} className="flex justify-between items-center px-3 py-3 shadow rounded-lg text-sm hover:bg-gray-50">
+                  <div key={item._id} className="flex justify-between items-center px-3 py-3 bg-gray-50 rounded-lg text-sm hover:bg-gray-100">
                     <span>
-                      {item.name} {key === "interests" && item.price != null ? ` ${item.price} บาท` : ""}
+                      {item.name}{key === "interests" && item.price != null ? ` - ${item.price.toLocaleString()} บาท` : ""}
                     </span>
                     <div className="flex gap-3">
                       <button onClick={() => openEditModal(key, item)} className="text-gray-400 hover:text-indigo-600">
@@ -304,7 +308,7 @@ function Modal({ title, children, onClose, onConfirm, danger }: { title: string;
           </button>
           <button
             onClick={onConfirm}
-            className={`px-4 py-2 rounded-lg text-sm text-white w-full sm:w-auto ${danger ? "bg-red-600" : "bg-indigo-600"}`}
+            className={`px-4 py-2 rounded-lg text-sm text-white w-full sm:w-auto ${danger ? "bg-red-600 hover:bg-red-700" : "bg-indigo-600 hover:bg-indigo-700"}`}
           >
             ยืนยัน
           </button>
