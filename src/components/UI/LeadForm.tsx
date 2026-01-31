@@ -54,7 +54,7 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
     phone: lead?.phone || '',
     interest: {
       name: lead?.interest?.[0]?.name || '',
-      price: lead?.interest?.[0]?.price || '0',
+      price: String(lead?.interest?.[0]?.price) || '0',
     },
     referralChannel: lead?.referralChannel || '',
     lineId: lead?.lineId || '',

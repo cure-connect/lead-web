@@ -14,7 +14,11 @@ export interface Lead {
   phone: string;
   lineId: string;
 
-  interest?: LeadInterest[];
+  interest?: Array<{
+    name: string;
+    price: number | string;
+    procedureId?: string;
+  }>;
   price: string;
   referralChannel: string;
   admin: string;

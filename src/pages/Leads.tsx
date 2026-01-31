@@ -83,7 +83,7 @@ const LeadsPage: React.FC = () => {
             name: item.patient?.name || "",
             phone: item.patient?.tel || "",
             lineId: item.patient?.lineId || "",
-            interest: item.interests || "",
+            interest: Array.isArray(item.interests) ? item.interests : [],
             referralChannel: item.referralChannel || "",
             admin: item.createdBy || "",
             branch: item.clinic?.branch || "",
@@ -361,93 +361,93 @@ const LeadsPage: React.FC = () => {
                     </tr>
                   ) : (
                     filteredLeads.map((lead) => (
-                    <tr
-                      key={lead.id}
-                      className="hover:bg-gray-50 transition-colors"
-                    >
-                      <td className="px-6 py-4 font-medium text-gray-900">
-                        {lead.name}
-                      </td>
+                      <tr
+                        key={lead.id}
+                        className="hover:bg-gray-50 transition-colors"
+                      >
+                        <td className="px-6 py-4 font-medium text-gray-900">
+                          {lead.name}
+                        </td>
 
-                      <td className="px-6 py-4 text-gray-600">
-                        {lead.phone}
-                      </td>
+                        <td className="px-6 py-4 text-gray-600">
+                          {lead.phone}
+                        </td>
 
-                      <td className="px-6 py-4 text-gray-500">
-                        {lead.createdAtDisplay}
-                      </td>
+                        <td className="px-6 py-4 text-gray-500">
+                          {lead.createdAtDisplay}
+                        </td>
 
-                      {activeTab === "scheduled" && (
-                        <>
-                          <td className="px-6 py-4 text-gray-700">
-                            {lead.appointmentDateDisplay}
-                          </td>
+                        {activeTab === "scheduled" && (
+                          <>
+                            <td className="px-6 py-4 text-gray-700">
+                              {lead.appointmentDateDisplay}
+                            </td>
 
-                          <td className="px-6 py-4 text-center">
-                            {lead.appointmentDate && (
-                              <span className="font-medium">
-                                {lead.status === "cancelled" && "-"}
+                            <td className="px-6 py-4 text-center">
+                              {lead.appointmentDate && (
+                                <span className="font-medium">
+                                  {lead.status === "cancelled" && "-"}
 
-                                {lead.status === "arrived" && (
-                                  <span className="text-green-600">ถึงวันนัดแล้ว</span>
-                                )}
+                                  {lead.status === "arrived" && (
+                                    <span className="text-green-600">ถึงวันนัดแล้ว</span>
+                                  )}
 
-                                {["scheduled", "rescheduled"].includes(lead.status) && (() => {
-                                  const days = getDaysUntilAppointment(lead.appointmentDate);
+                                  {["scheduled", "rescheduled"].includes(lead.status) && (() => {
+                                    const days = getDaysUntilAppointment(lead.appointmentDate);
 
-                                  if (days === 0)
-                                    return <span className="text-green-600">ถึงวันนัดแล้ว</span>;
+                                    if (days === 0)
+                                      return <span className="text-green-600">ถึงวันนัดแล้ว</span>;
 
-                                  if (days > 0)
-                                    return <span className="text-green-600">อีก {days} วัน</span>;
+                                    if (days > 0)
+                                      return <span className="text-green-600">อีก {days} วัน</span>;
 
-                                  return (
-                                    <span className="text-red-600">
-                                      เลยมาแล้ว {Math.abs(days)} วัน
-                                    </span>
-                                  );
-                                })()}
-                              </span>
-                            )}
-                          </td>
+                                    return (
+                                      <span className="text-red-600">
+                                        เลยมาแล้ว {Math.abs(days)} วัน
+                                      </span>
+                                    );
+                                  })()}
+                                </span>
+                              )}
+                            </td>
 
-                          <td className="px-6 py-4 text-center">
-                            <button
-                              onClick={() => openStatusModal(lead)}
-                              className={`inline-flex items-center justify-center px-4 py-2 text-xs font-semibold rounded-md
+                            <td className="px-6 py-4 text-center">
+                              <button
+                                onClick={() => openStatusModal(lead)}
+                                className={`inline-flex items-center justify-center px-4 py-2 text-xs font-semibold rounded-md
     ${lead.status === "scheduled"
-                                  ? "bg-blue-100 text-blue-700"
-                                  : lead.status === "rescheduled"
-                                    ? "bg-yellow-100 text-yellow-700"
-                                    : lead.status === "arrived"
-                                      ? "bg-green-100 text-green-700"
-                                      : lead.status === "cancelled"
-                                        ? "bg-red-100 text-red-700"
-                                        : "bg-gray-100 text-gray-700"
-                                }
+                                    ? "bg-blue-100 text-blue-700"
+                                    : lead.status === "rescheduled"
+                                      ? "bg-yellow-100 text-yellow-700"
+                                      : lead.status === "arrived"
+                                        ? "bg-green-100 text-green-700"
+                                        : lead.status === "cancelled"
+                                          ? "bg-red-100 text-red-700"
+                                          : "bg-gray-100 text-gray-700"
+                                  }
   `}
-                            >
-                              {statusLabel[lead.status]}
-                            </button>
+                              >
+                                {statusLabel[lead.status]}
+                              </button>
 
-                          </td>
-                        </>
-                      )}
+                            </td>
+                          </>
+                        )}
 
-                      <td className="px-6 py-4 text-center">
-                        <div className="flex justify-center gap-4">
-                          <Edit2
-                            className="w-4 h-4 text-indigo-600 cursor-pointer hover:scale-110 transition-transform"
-                            onClick={() => { setEditingLead(lead); setIsModalOpen(true); }}
-                          />
-                          <Trash2
-                            className="w-4 h-4 text-red-600 cursor-pointer hover:scale-110 transition-transform"
-                            onClick={() => openDeleteModal(lead)}
-                          />
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                        <td className="px-6 py-4 text-center">
+                          <div className="flex justify-center gap-4">
+                            <Edit2
+                              className="w-4 h-4 text-indigo-600 cursor-pointer hover:scale-110 transition-transform"
+                              onClick={() => { setEditingLead(lead); setIsModalOpen(true); }}
+                            />
+                            <Trash2
+                              className="w-4 h-4 text-red-600 cursor-pointer hover:scale-110 transition-transform"
+                              onClick={() => openDeleteModal(lead)}
+                            />
+                          </div>
+                        </td>
+                      </tr>
+                    ))
                   )}
                 </tbody>
               </table>
@@ -488,14 +488,14 @@ const LeadsPage: React.FC = () => {
               ต้องการลบ <b>{leadToDelete?.name}</b> ใช่หรือไม่?
             </p>
             <div className="flex justify-end gap-2">
-              <button 
-                onClick={() => { setIsDeleteModalOpen(false); setLeadToDelete(null); }} 
+              <button
+                onClick={() => { setIsDeleteModalOpen(false); setLeadToDelete(null); }}
                 className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50"
               >
                 ยกเลิก
               </button>
-              <button 
-                onClick={confirmDelete} 
+              <button
+                onClick={confirmDelete}
                 className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700"
               >
                 ลบ
@@ -547,8 +547,14 @@ const StatusModal = ({
   const [newAppointmentDate, setNewAppointmentDate] = useState("");
   const [newAppointmentTime, setNewAppointmentTime] = useState("");
   const [procedures, setProcedures] = useState<
-    Array<{ name: string; price: string; procedureId?: string }>
-  >([{ name: "", price: "0", procedureId: undefined }]);
+    Array<{
+      name: string;
+      price: string;
+      procedureId?: string;
+      readonly?: boolean;
+    }>
+  >([{ name: "", price: "0", procedureId: undefined, readonly: false }]);
+
   const [paymentMethod, setPaymentMethod] = useState("");
   const [installmentMonths, setInstallmentMonths] = useState<number>(0);
   const [monthlyPayments, setMonthlyPayments] = useState<number[]>([]);
@@ -561,6 +567,31 @@ const StatusModal = ({
 
   const [procedureOptions, setProcedureOptions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (
+      selectedStatus === "arrived" &&
+      Array.isArray(lead.interest) &&
+      lead.interest.length > 0 &&
+      procedureOptions.length > 0
+    ) {
+      setProcedures(
+        lead.interest.map((p) => {
+          const matched = procedureOptions.find(
+            (opt) => opt.name === p.name
+          );
+
+          return {
+            name: p.name,
+            price: String(p.price),
+            procedureId: matched?._id ? String(matched._id) : undefined,
+            readonly: true,
+          };
+        })
+      );
+    }
+  }, [selectedStatus, lead.interest, procedureOptions]);
+
 
   useEffect(() => {
     const fetchProcedures = async () => {
@@ -592,8 +623,12 @@ const StatusModal = ({
   }, [installmentMonths]);
 
   const addProcedure = () => {
-    setProcedures([...procedures, { name: "", price: "0", procedureId: undefined }]);
+    setProcedures([
+      ...procedures,
+      { name: "", price: "0", procedureId: undefined, readonly: false },
+    ]);
   };
+
 
   const removeProcedure = (index: number) => {
     setProcedures(procedures.filter((_, i) => i !== index));
@@ -747,6 +782,7 @@ const StatusModal = ({
                 >
                   <select
                     value={procedure.procedureId ?? ""}
+                    disabled={procedure.readonly}
                     onChange={(e) => {
                       const selectedId = e.target.value;
 
@@ -758,10 +794,11 @@ const StatusModal = ({
 
                       updateProcedure(index, "procedureId", String(selected._id));
                       updateProcedure(index, "name", selected.name);
-                      updateProcedure(index, "price", selected.price);
+                      updateProcedure(index, "price", String(selected.price));
                     }}
-                    className="flex-1 px-3 py-2 border rounded-md bg-white"
+                    className="flex-1 px-3 py-2 border rounded-md bg-white disabled:bg-gray-100"
                   >
+
                     <option value="">
                       {loading ? "กำลังโหลด..." : "เลือกหัตถการ"}
                     </option>
@@ -780,7 +817,7 @@ const StatusModal = ({
                     className="w-40 px-3 py-2 border rounded-md bg-gray-100 text-right"
                   />
 
-                  {procedures.length > 1 && (
+                  {!procedure.readonly && (
                     <button
                       onClick={() => removeProcedure(index)}
                       className="text-red-500 hover:text-red-700"
@@ -788,6 +825,7 @@ const StatusModal = ({
                       <Trash2 className="w-5 h-5" />
                     </button>
                   )}
+
                 </div>
               ))}
 
