@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, type ReactNode } from "react";
-import { Search, Plus, Edit2, Trash2, X, Users, CalendarCheck, Clock, XCircle } from "lucide-react";
+import { Search, Plus, Edit2, Trash2, X, Users, CalendarCheck, Clock, XCircle, Eye } from "lucide-react";
 import { type Lead } from "../types";
 import Modal from "../components/UI/Modal";
 import LeadForm from "../components/UI/LeadForm";
@@ -51,6 +51,14 @@ const getDaysUntilAppointment = (appointmentDate: string) => {
   return diffDays;
 };
 
+const isLeadLocked = (lead: Lead): boolean => {
+  const hasArrivedStatus = lead.status === "arrived";
+  const hasProcedures = Array.isArray(lead.interest) && lead.interest.length > 0;
+  const hasPayment = !!(lead.payments && lead.payments.method);
+  
+  return hasArrivedStatus && hasProcedures && hasPayment;
+};
+
 const LeadsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<"notScheduled" | "scheduled">("notScheduled");
   const [selectedMonth, setSelectedMonth] = useState("2026-01");
@@ -62,6 +70,7 @@ const LeadsPage: React.FC = () => {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [leadToDelete, setLeadToDelete] = useState<Lead | null>(null);
   const [statusModalLead, setStatusModalLead] = useState<Lead | null>(null);
+  const [viewingLead, setViewingLead] = useState<Lead | null>(null);
 
 
   const fetchLeads = async () => {
@@ -95,6 +104,7 @@ const LeadsPage: React.FC = () => {
               ? formatDateTime(item.appointments.date)
               : "ยังไม่นัด",
             note: item.note || "",
+            payments: item.payments,
           };
         }
       );
@@ -414,16 +424,17 @@ const LeadsPage: React.FC = () => {
                             <td className="px-6 py-4 text-center">
                               <button
                                 onClick={() => openStatusModal(lead)}
-                                className={`inline-flex items-center justify-center px-4 py-2 text-xs font-semibold rounded-md
+                                disabled={isLeadLocked(lead)}
+                                className={`inline-flex items-center justify-center px-4 py-2 text-xs font-semibold rounded-md transition-all
     ${lead.status === "scheduled"
-                                    ? "bg-blue-100 text-blue-700"
+                                    ? `bg-blue-100 text-blue-700 ${isLeadLocked(lead) ? "cursor-not-allowed" : "hover:bg-blue-200"}`
                                     : lead.status === "rescheduled"
-                                      ? "bg-yellow-100 text-yellow-700"
+                                      ? `bg-yellow-100 text-yellow-700 ${isLeadLocked(lead) ? "cursor-not-allowed" : "hover:bg-yellow-200"}`
                                       : lead.status === "arrived"
-                                        ? "bg-green-100 text-green-700"
+                                        ? `bg-green-100 text-green-700 ${isLeadLocked(lead) ? "cursor-not-allowed" : "hover:bg-green-200"}`
                                         : lead.status === "cancelled"
-                                          ? "bg-red-100 text-red-700"
-                                          : "bg-gray-100 text-gray-700"
+                                          ? `bg-red-100 text-red-700 ${isLeadLocked(lead) ? "cursor-not-allowed" : "hover:bg-red-200"}`
+                                          : `bg-gray-100 text-gray-700 ${isLeadLocked(lead) ? "cursor-not-allowed" : "hover:bg-gray-200"}`
                                   }
   `}
                               >
@@ -436,9 +447,22 @@ const LeadsPage: React.FC = () => {
 
                         <td className="px-6 py-4 text-center">
                           <div className="flex justify-center gap-4">
+                            <Eye
+                              className="w-4 h-4 text-blue-600 cursor-pointer hover:scale-110 transition-transform"
+                              onClick={() => setViewingLead(lead)}
+                            />
                             <Edit2
-                              className="w-4 h-4 text-indigo-600 cursor-pointer hover:scale-110 transition-transform"
-                              onClick={() => { setEditingLead(lead); setIsModalOpen(true); }}
+                              className={`w-4 h-4 transition-all ${
+                                isLeadLocked(lead)
+                                  ? "text-gray-300 cursor-not-allowed opacity-50"
+                                  : "text-indigo-600 cursor-pointer hover:scale-110"
+                              }`}
+                              onClick={() => {
+                                if (!isLeadLocked(lead)) {
+                                  setEditingLead(lead);
+                                  setIsModalOpen(true);
+                                }
+                              }}
                             />
                             <Trash2
                               className="w-4 h-4 text-red-600 cursor-pointer hover:scale-110 transition-transform"
@@ -465,6 +489,13 @@ const LeadsPage: React.FC = () => {
             await fetchLeads();
             setStatusModalLead(null);
           }}
+        />
+      )}
+
+      {viewingLead && (
+        <ViewLeadModal
+          lead={viewingLead}
+          onClose={() => setViewingLead(null)}
         />
       )}
 
@@ -959,6 +990,156 @@ const StatusModal = ({
             className="px-5 py-2 bg-indigo-600 text-white rounded-md text-sm hover:bg-indigo-700 disabled:bg-gray-300"
           >
             บันทึก
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const ViewLeadModal = ({
+  lead,
+  onClose,
+}: {
+  lead: Lead;
+  onClose: () => void;
+}) => {
+  const interestDisplay = Array.isArray(lead.interest)
+    ? lead.interest.map((i) => `${i.name} (${i.price} บาท)`).join(", ")
+    : "ไม่มี";
+
+  return (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="flex justify-between items-center px-6 py-4 border-b">
+          <h2 className="text-lg font-semibold">รายละเอียด Lead</h2>
+          <button
+            onClick={onClose}
+            className="p-1 rounded-full hover:bg-gray-100"
+          >
+            <X className="w-5 h-5 text-gray-500" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-6">
+          <div className="grid grid-cols-2 gap-6">
+            <div>
+              <label className="text-sm font-medium text-gray-500">ชื่อนามสกุล</label>
+              <p className="mt-2 text-gray-900 font-medium">{lead.name}</p>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-500">เบอร์ติดต่อ</label>
+              <p className="mt-2 text-gray-900 font-medium">{lead.phone}</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-6">
+            <div>
+              <label className="text-sm font-medium text-gray-500">Line ID</label>
+              <p className="mt-2 text-gray-900">{lead.lineId || "-"}</p>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-500">ช่องทางที่รู้จัก</label>
+              <p className="mt-2 text-gray-900">{lead.referralChannel || "-"}</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-6">
+            <div>
+              <label className="text-sm font-medium text-gray-500">สาขา</label>
+              <p className="mt-2 text-gray-900">{lead.branch || "-"}</p>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-500">แอดมิน</label>
+              <p className="mt-2 text-gray-900">{lead.admin || "-"}</p>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-gray-500">ความสนใจ(หัตถการ)</label>
+            <p className="mt-2 text-gray-900">{interestDisplay}</p>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-gray-500">สถานะ</label>
+            <div className="mt-2">
+              <span className={`inline-flex items-center justify-center px-4 py-2 text-xs font-semibold rounded-md
+                ${lead.status === "scheduled"
+                  ? "bg-blue-100 text-blue-700"
+                  : lead.status === "rescheduled"
+                    ? "bg-yellow-100 text-yellow-700"
+                    : lead.status === "arrived"
+                      ? "bg-green-100 text-green-700"
+                      : lead.status === "cancelled"
+                        ? "bg-red-100 text-red-700"
+                        : lead.status === "pending"
+                          ? "bg-orange-100 text-orange-700"
+                          : "bg-gray-100 text-gray-700"
+                }`}
+              >
+                {statusLabel[lead.status] || lead.status}
+              </span>
+            </div>
+          </div>
+
+          {lead.appointmentDate && (
+            <div className="grid grid-cols-2 gap-6">
+              <div>
+                <label className="text-sm font-medium text-gray-500">วันที่นัด</label>
+                <p className="mt-2 text-gray-900">{lead.appointmentDateDisplay || "-"}</p>
+              </div>
+            </div>
+          )}
+
+          {lead.payments && (
+            <div className="border-t pt-6">
+              <h3 className="text-sm font-semibold text-gray-700 mb-4">ข้อมูลการชำระเงิน</h3>
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-6">
+                  <div>
+                    <label className="text-sm font-medium text-gray-500">วิธีชำระเงิน</label>
+                    <p className="mt-2 text-gray-900">{lead.payments.method || "-"}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-500">จำนวนเงิน</label>
+                    <p className="mt-2 text-gray-900 font-medium">{lead.payments.amount?.toLocaleString() || "-"} บาท</p>
+                  </div>
+                </div>
+                {lead.payments.installment && (
+                  <div>
+                    <label className="text-sm font-medium text-gray-500">ผ่อนชำระ {lead.payments.installment.months} เดือน</label>
+                    <div className="mt-2 space-y-2">
+                      {Array.isArray(lead.payments.installment.monthlyAmount) &&
+                        lead.payments.installment.monthlyAmount.map((amount, index) => (
+                          <p key={index} className="text-gray-900 text-sm">
+                            เดือนที่ {index + 1}: {amount?.toLocaleString() || "-"} บาท
+                          </p>
+                        ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {lead.note && (
+            <div className="border-t pt-6">
+              <label className="text-sm font-medium text-gray-500">หมายเหตุ</label>
+              <p className="mt-2 text-gray-900 whitespace-pre-wrap">{lead.note}</p>
+            </div>
+          )}
+
+          <div className="text-xs text-gray-400 border-t pt-4">
+            <p>สร้างเมื่อ: {lead.createdAtDisplay}</p>
+          </div>
+        </div>
+
+        <div className="flex justify-end px-6 py-4 border-t bg-gray-50 rounded-b-2xl">
+          <button
+            onClick={onClose}
+            className="px-5 py-2 bg-indigo-600 text-white rounded-md text-sm hover:bg-indigo-700"
+          >
+            ปิด
           </button>
         </div>
       </div>

@@ -26,6 +26,23 @@ type LeadFormState = {
   note: string;
 };
 
+const extractDateFromISO = (isoString?: string): string => {
+  if (!isoString) return '';
+  const date = new Date(isoString);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const extractTimeFromISO = (isoString?: string): string => {
+  if (!isoString) return '';
+  const date = new Date(isoString);
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${hours}:${minutes}`;
+};
+
 
 const steps = [
   { label: 'ข้อมูลลูกค้า' },
@@ -60,9 +77,9 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
     lineId: lead?.lineId || '',
     admin: lead?.admin || '',
     branch: lead?.branch || '',
-    status: lead?.status === 'scheduled' ? 'ทำนัด' : 'pending',
-    appointmentDate: lead?.appointmentDate || '',
-    appointmentTime: lead?.appointmentTime || '',
+    status: lead?.status === 'scheduled' || lead?.status === 'rescheduled' ? 'ทำนัด' : 'pending',
+    appointmentDate: extractDateFromISO(lead?.appointmentDate),
+    appointmentTime: extractTimeFromISO(lead?.appointmentDate),
     note: lead?.note || '',
   });
 

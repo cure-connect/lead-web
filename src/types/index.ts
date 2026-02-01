@@ -6,6 +6,15 @@ export interface LeadInterest {
   procedureId?: number | string;
 }
 
+export interface LeadPayment {
+  method: string;
+  amount: number;
+  installment?: {
+    months: number;
+    monthlyAmount: number[];
+  };
+}
+
 export interface Lead {
   _id: any;
   id: string;
@@ -35,4 +44,5 @@ export interface Lead {
   createdAtDisplay:string
   note: string;
   createdAt: string;
+  payments?: LeadPayment;
 }
