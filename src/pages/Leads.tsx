@@ -55,13 +55,16 @@ const isLeadLocked = (lead: Lead): boolean => {
   const hasArrivedStatus = lead.status === "arrived";
   const hasProcedures = Array.isArray(lead.interest) && lead.interest.length > 0;
   const hasPayment = !!(lead.payments && lead.payments.method);
-  
+
   return hasArrivedStatus && hasProcedures && hasPayment;
 };
 
 const LeadsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<"notScheduled" | "scheduled">("notScheduled");
-  const [selectedMonth, setSelectedMonth] = useState("2026-01");
+  const [selectedMonth, setSelectedMonth] = useState(
+    new Date().toISOString().slice(0, 7)
+  );
+
   const [searchQuery, setSearchQuery] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
@@ -452,11 +455,10 @@ const LeadsPage: React.FC = () => {
                               onClick={() => setViewingLead(lead)}
                             />
                             <Edit2
-                              className={`w-4 h-4 transition-all ${
-                                isLeadLocked(lead)
-                                  ? "text-gray-300 cursor-not-allowed opacity-50"
-                                  : "text-indigo-600 cursor-pointer hover:scale-110"
-                              }`}
+                              className={`w-4 h-4 transition-all ${isLeadLocked(lead)
+                                ? "text-gray-300 cursor-not-allowed opacity-50"
+                                : "text-indigo-600 cursor-pointer hover:scale-110"
+                                }`}
                               onClick={() => {
                                 if (!isLeadLocked(lead)) {
                                   setEditingLead(lead);
@@ -1008,6 +1010,14 @@ const ViewLeadModal = ({
     ? lead.interest.map((i) => `${i.name} (${i.price} บาท)`).join(", ")
     : "ไม่มี";
 
+  const paymentMethodMap: Record<string, string> = {
+    cash: "เงินสด",
+    transfer: "โอนเงิน",
+    card: "บัตรเครดิต",
+    installment: "ผ่อนชำระ",
+  };
+
+
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
@@ -1098,7 +1108,9 @@ const ViewLeadModal = ({
                 <div className="grid grid-cols-2 gap-6">
                   <div>
                     <label className="text-sm font-medium text-gray-500">วิธีชำระเงิน</label>
-                    <p className="mt-2 text-gray-900">{lead.payments.method || "-"}</p>
+                    <p className="mt-2 text-gray-900">
+                      {paymentMethodMap[lead.payments?.method] || "-"}
+                    </p>
                   </div>
                   <div>
                     <label className="text-sm font-medium text-gray-500">จำนวนเงิน</label>
