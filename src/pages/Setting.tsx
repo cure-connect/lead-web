@@ -44,7 +44,9 @@ export default function SettingsPage() {
   });
 
   const [inputs, setInputs] = useState<Record<string, { name: string; price?: string }>>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [editOpen, setEditOpen] = useState(false);
+  const [editOpen_error, setEditOpenError] = useState("");
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   const [currentSection, setCurrentSection] = useState<string | null>(null);
@@ -60,7 +62,7 @@ export default function SettingsPage() {
           headers: getAuthHeaders()
         });
         const json = await res.json();
-        
+
         setSections(prev => ({
           ...prev,
           admins: { ...prev.admins, items: json.admins ?? [] },
@@ -78,15 +80,24 @@ export default function SettingsPage() {
   const createItem = async (sectionKey: string) => {
     const inputData = inputs[sectionKey];
     const section = sections[sectionKey];
-    
+
     if (!inputData?.name?.trim()) return;
     if (sectionKey === "interests" && !inputData.price?.trim()) return;
 
-    const payload: Record<string, unknown> = { 
-      type: section.type, 
-      name: inputData.name.trim() 
+    const trimmedName = inputData.name.trim().toLowerCase();
+    const isDuplicate = section.items.some(
+      item => item.name.toLowerCase() === trimmedName
+    );
+    if (isDuplicate) {
+      setErrors(prev => ({ ...prev, [sectionKey]: `"${inputData.name.trim()}" มีอยู่ในระบบแล้ว` }));
+      return;
+    }
+
+    const payload: Record<string, unknown> = {
+      type: section.type,
+      name: inputData.name.trim()
     };
-    
+
     if (sectionKey === "interests") {
       payload.price = parseFloat(inputData.price!);
     }
@@ -99,14 +110,25 @@ export default function SettingsPage() {
       });
       const json = await res.json();
 
+      if (!res.ok) {
+        if (res.status === 409) {
+          setErrors(prev => ({ ...prev, [sectionKey]: json.message }));
+        } else {
+          setErrors(prev => ({ ...prev, [sectionKey]: "เกิดข้อผิดพลาด กรุณาลองใหม่" }));
+        }
+        return;
+      }
+
       setSections(prev => ({
         ...prev,
         [sectionKey]: { ...prev[sectionKey], items: [...prev[sectionKey].items, json.data] }
       }));
 
       setInputs(prev => ({ ...prev, [sectionKey]: { name: "", price: "" } }));
+      setErrors(prev => ({ ...prev, [sectionKey]: "" }));
     } catch (err) {
       console.error("Failed to create", sectionKey, err);
+      setErrors(prev => ({ ...prev, [sectionKey]: "เกิดข้อผิดพลาด กรุณาลองใหม่" }));
     }
   };
 
@@ -122,37 +144,49 @@ export default function SettingsPage() {
     if (!currentSection || !currentItem) return;
     const section = sections[currentSection];
 
-    const payload: Record<string, unknown> = { 
+    const payload: Record<string, unknown> = {
       type: section.type,
-      name: editValue.trim() 
+      name: editValue.trim()
     };
-    
+
     if (currentSection === "interests") {
       payload.price = parseFloat(editPrice);
     }
 
     try {
-      await fetch(`${BASE_URL}/setting/editsetting/${currentItem._id}`, {
+      const res = await fetch(`${BASE_URL}/setting/editsetting/${currentItem._id}`, {
         method: "PATCH",
         headers: getAuthHeaders(),
         body: JSON.stringify(payload)
       });
+
+      if (!res.ok) {
+        const json = await res.json();
+        if (res.status === 409) {
+          setEditOpenError(json.message);
+        } else {
+          setEditOpenError("เกิดข้อผิดพลาด กรุณาลองใหม่");
+        }
+        return;
+      }
 
       setSections(prev => ({
         ...prev,
         [currentSection]: {
           ...prev[currentSection],
           items: prev[currentSection].items.map(i =>
-            i._id === currentItem._id 
-              ? { ...i, name: editValue, price: currentSection === "interests" ? parseFloat(editPrice) : i.price } 
+            i._id === currentItem._id
+              ? { ...i, name: editValue, price: currentSection === "interests" ? parseFloat(editPrice) : i.price }
               : i
           )
         }
       }));
 
       setEditOpen(false);
+      setEditOpenError("");
     } catch (err) {
       console.error("Failed to edit", currentSection, err);
+      setEditOpenError("เกิดข้อผิดพลาด กรุณาลองใหม่");
     }
   };
 
@@ -170,12 +204,12 @@ export default function SettingsPage() {
         method: "DELETE",
         headers: getAuthHeaders()
       });
-      
+
       setSections(prev => ({
         ...prev,
-        [currentSection]: { 
-          ...prev[currentSection], 
-          items: prev[currentSection].items.filter(i => i._id !== currentItem._id) 
+        [currentSection]: {
+          ...prev[currentSection],
+          items: prev[currentSection].items.filter(i => i._id !== currentItem._id)
         }
       }));
       setDeleteOpen(false);
@@ -200,14 +234,17 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              <div className="flex flex-col sm:flex-row gap-2 mb-4">
+              <div className="flex flex-col sm:flex-row gap-2 mb-1">
                 {key === "interests" ? (
                   <>
                     <input
                       value={inputs[key]?.name || ""}
-                      onChange={e => setInputs(prev => ({ ...prev, [key]: { ...prev[key], name: e.target.value } }))}
+                      onChange={e => {
+                        setInputs(prev => ({ ...prev, [key]: { ...prev[key], name: e.target.value } }));
+                        if (errors[key]) setErrors(prev => ({ ...prev, [key]: "" }));
+                      }}
                       placeholder="ชื่อหัตถการ"
-                      className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      className={`flex-1 px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none ${errors[key] ? "border-red-400" : "border-gray-200"}`}
                     />
                     <input
                       value={inputs[key]?.price || ""}
@@ -220,7 +257,8 @@ export default function SettingsPage() {
                     />
                     <button
                       onClick={() => createItem(key)}
-                      className="px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex justify-center items-center"
+                      disabled={!inputs[key]?.name?.trim() || !inputs[key]?.price?.trim()}
+                      className="px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex justify-center items-center disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <Plus className="w-5 h-5 sm:w-4 sm:h-4" />
                     </button>
@@ -229,19 +267,27 @@ export default function SettingsPage() {
                   <>
                     <input
                       value={inputs[key]?.name || ""}
-                      onChange={e => setInputs(prev => ({ ...prev, [key]: { name: e.target.value } }))}
+                      onChange={e => {
+                        setInputs(prev => ({ ...prev, [key]: { name: e.target.value } }));
+                        if (errors[key]) setErrors(prev => ({ ...prev, [key]: "" }));
+                      }}
                       placeholder={`เพิ่ม${section.title}`}
-                      className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      className={`flex-1 px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none ${errors[key] ? "border-red-400" : "border-gray-200"}`}
                     />
                     <button
                       onClick={() => createItem(key)}
-                      className="px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex justify-center items-center"
+                      disabled={!inputs[key]?.name?.trim()}
+                      className="px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex justify-center items-center disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <Plus className="w-5 h-5 sm:w-4 sm:h-4" />
                     </button>
                   </>
                 )}
               </div>
+
+              {errors[key] && (
+                <p className="text-xs text-red-500 mb-3 px-1">* {errors[key]}</p>
+              )}
 
               <div className="space-y-2">
                 {section.items.map(item => (
@@ -266,11 +312,11 @@ export default function SettingsPage() {
       </div>
 
       {editOpen && (
-        <Modal title="แก้ไขรายการ" onClose={() => setEditOpen(false)} onConfirm={confirmEdit}>
+        <Modal title="แก้ไขรายการ" onClose={() => { setEditOpen(false); setEditOpenError(""); }} onConfirm={confirmEdit}>
           <input
             value={editValue}
-            onChange={e => setEditValue(e.target.value)}
-            className="w-full px-3 py-2 mb-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+            onChange={e => { setEditValue(e.target.value); setEditOpenError(""); }}
+            className={`w-full px-3 py-2 mb-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none ${editOpen_error ? "border-red-400" : ""}`}
             placeholder="ชื่อ"
           />
           {currentSection === "interests" && (
@@ -283,6 +329,9 @@ export default function SettingsPage() {
               pattern="[0-9]*"
               className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
             />
+          )}
+          {editOpen_error && (
+            <p className="text-xs text-red-500 mt-2">* {editOpen_error}</p>
           )}
         </Modal>
       )}
