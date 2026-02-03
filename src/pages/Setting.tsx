@@ -70,6 +70,15 @@ export default function SettingsPage() {
     if (!inputData?.name?.trim()) return;
     if (sectionKey === "interests" && !inputData.price?.trim()) return;
 
+    const trimmedName = inputData.name.trim().toLowerCase();
+    const isDuplicate = section.items.some(
+      item => item.name.toLowerCase() === trimmedName
+    );
+    if (isDuplicate) {
+      setErrors(prev => ({ ...prev, [sectionKey]: `"${inputData.name.trim()}" มีอยู่ในระบบแล้ว` }));
+      return;
+    }
+
     const payload: Record<string, unknown> = {
       type: section.type,
       name: inputData.name.trim(),
@@ -94,9 +103,15 @@ export default function SettingsPage() {
         ...prev,
         [sectionKey]: { name: "", price: "" },
       }));
-    } catch (err) {
+      setErrors(prev => ({ ...prev, [sectionKey]: "" }));
+    } catch (err: any) {
       console.error("Failed to create", sectionKey, err);
-      setErrors(prev => ({ ...prev, [sectionKey]: "เกิดข้อผิดพลาด กรุณาลองใหม่" }));
+      // Backend: 409 duplicate
+      if (err.response?.status === 409) {
+        setErrors(prev => ({ ...prev, [sectionKey]: err.response.data.message }));
+      } else {
+        setErrors(prev => ({ ...prev, [sectionKey]: "เกิดข้อผิดพลาด กรุณาลองใหม่" }));
+      }
     }
   };
 
@@ -146,9 +161,13 @@ export default function SettingsPage() {
 
       setEditOpen(false);
       setEditOpenError("");
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to edit", currentSection, err);
-      setEditOpenError("เกิดข้อผิดพลาด กรุณาลองใหม่");
+      if (err.response?.status === 409) {
+        setEditOpenError(err.response.data.message);
+      } else {
+        setEditOpenError("เกิดข้อผิดพลาด กรุณาลองใหม่");
+      }
     }
   };
 
