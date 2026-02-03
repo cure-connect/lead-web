@@ -7,7 +7,8 @@ import React, {
 } from 'react';
 
 interface AuthUser {
-  token: string;
+  accessToken: string;
+  refreshToken: string;
   username: string;
   clinicId: number;
   clinicName: string;
@@ -39,13 +40,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const login = (data: AuthUser) => {
     setUser(data);
     localStorage.setItem('auth', JSON.stringify(data));
-    localStorage.setItem('token', data.token);
+    localStorage.setItem('accessToken', data.accessToken);
+    localStorage.setItem('refreshToken', data.refreshToken);
   };
 
   const logout = () => {
     setUser(null);
     localStorage.removeItem('auth');
-    localStorage.removeItem('token');
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
   };
 
   return (

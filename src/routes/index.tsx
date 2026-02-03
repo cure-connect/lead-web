@@ -9,7 +9,7 @@ import { useAuth } from '../context/AuthContext';
 
 const AppRoutes: React.FC = () => {
   const { user } = useAuth();
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem('accessToken');
 
   const isAuthenticated = !!user || !!token;
 

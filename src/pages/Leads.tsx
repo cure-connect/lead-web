@@ -3,18 +3,7 @@ import { Search, Plus, Edit2, Trash2, X, Users, CalendarCheck, Clock, XCircle, E
 import { type Lead } from "../types";
 import Modal from "../components/UI/Modal";
 import LeadForm from "../components/UI/LeadForm";
-
-const API_URL = import.meta.env.VITE_API_URL;
-const API_KEY = import.meta.env.VITE_API_KEY;
-
-const getAuthHeaders = () => {
-  const token = localStorage.getItem("token");
-  return {
-    "Content-Type": "application/json",
-    "x-api-key": API_KEY,
-    "Authorization": `Bearer ${token}`
-  };
-};
+import api from "@/api/api";
 
 const statusLabel: Record<string, string> = {
   pending: "รอตัดสินใจ",
@@ -75,48 +64,45 @@ const LeadsPage: React.FC = () => {
   const [statusModalLead, setStatusModalLead] = useState<Lead | null>(null);
   const [viewingLead, setViewingLead] = useState<Lead | null>(null);
 
-
   const fetchLeads = async () => {
     try {
-      const res = await fetch(`${API_URL}/lead`, {
-        headers: getAuthHeaders(),
+      const res = await api.get("/lead");
+
+      const result = res.data;
+
+      const mappedLeads: Lead[] = (
+        Array.isArray(result.data) ? result.data : []
+      ).map((item: any) => {
+        const status = item.appointments?.status ?? "pending";
+
+        return {
+          id: item._id,
+          name: item.patient?.name || "",
+          phone: item.patient?.tel || "",
+          lineId: item.patient?.lineId || "",
+          interest: Array.isArray(item.interests) ? item.interests : [],
+          referralChannel: item.referralChannel || "",
+          admin: item.createdBy || "",
+          branch: item.clinic?.branch || "",
+          status,
+          createdAt: item.createdAt,
+          createdAtDisplay: formatDate(item.createdAt),
+          appointmentDate: item.appointments?.date,
+          appointmentDateDisplay: item.appointments?.date
+            ? formatDateTime(item.appointments.date)
+            : "ยังไม่นัด",
+          note: item.note || "",
+          payments: item.payments,
+        };
       });
 
-      if (!res.ok) throw new Error("Fetch leads failed");
-
-      const result = await res.json();
-
-      const mappedLeads: Lead[] = (Array.isArray(result.data) ? result.data : []).map(
-        (item: any) => {
-          const status = item.appointments?.status ?? "pending";
-
-          return {
-            id: item._id,
-            name: item.patient?.name || "",
-            phone: item.patient?.tel || "",
-            lineId: item.patient?.lineId || "",
-            interest: Array.isArray(item.interests) ? item.interests : [],
-            referralChannel: item.referralChannel || "",
-            admin: item.createdBy || "",
-            branch: item.clinic?.branch || "",
-            status,
-            createdAt: item.createdAt,
-            createdAtDisplay: formatDate(item.createdAt),
-            appointmentDate: item.appointments?.date,
-            appointmentDateDisplay: item.appointments?.date
-              ? formatDateTime(item.appointments.date)
-              : "ยังไม่นัด",
-            note: item.note || "",
-            payments: item.payments,
-          };
-        }
+      mappedLeads.sort((a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
 
-
-      mappedLeads.sort((a, b) => (b.createdAt > a.createdAt ? 1 : -1));
       setLeads(mappedLeads);
     } catch (error) {
-      console.error(error);
+      console.error("Fetch leads failed", error);
       setLeads([]);
     }
   };
@@ -201,27 +187,16 @@ const LeadsPage: React.FC = () => {
         }
       }
 
+
       if (!editingLead) {
-        payload.clinic = { name: lead.name, branch: lead.branch || "Bangkok" };
-        const res = await fetch(`${API_URL}/createlead`, {
-          method: "POST",
-          headers: getAuthHeaders(),
-          body: JSON.stringify(payload),
-        });
-        if (!res.ok) {
-          const err = await res.json();
-          throw new Error(err.message || "Create lead failed");
-        }
+        payload.clinic = {
+          name: lead.name,
+          branch: lead.branch || "Bangkok",
+        };
+
+        await api.post("/createlead", payload);
       } else {
-        const res = await fetch(`${API_URL}/${lead.id}`, {
-          method: "PATCH",
-          headers: getAuthHeaders(),
-          body: JSON.stringify(payload),
-        });
-        if (!res.ok) {
-          const err = await res.json();
-          throw new Error(err.message || "Update lead failed");
-        }
+        await api.patch(`/${lead.id}`, payload);
       }
 
       await fetchLeads();
@@ -239,13 +214,16 @@ const LeadsPage: React.FC = () => {
 
   const confirmDelete = async () => {
     if (!leadToDelete) return;
-    await fetch(`${API_URL}/${leadToDelete.id}`, {
-      method: "DELETE",
-      headers: getAuthHeaders(),
-    });
-    await fetchLeads();
-    setIsDeleteModalOpen(false);
-    setLeadToDelete(null);
+
+    try {
+      await api.delete(`/${leadToDelete.id}`);
+      await fetchLeads();
+    } catch (err) {
+      console.error("Delete lead failed", err);
+    } finally {
+      setIsDeleteModalOpen(false);
+      setLeadToDelete(null);
+    }
   };
 
   const openStatusModal = (lead: Lead) => {
@@ -630,11 +608,8 @@ const StatusModal = ({
     const fetchProcedures = async () => {
       try {
         setLoading(true);
-        const res = await fetch(
-          `${API_URL}/setting/gettype`, { headers: getAuthHeaders() }
-        );
-        const data = await res.json();
-        setProcedureOptions(data.interests ?? []);
+        const res = await api.get("/setting/gettype");
+        setProcedureOptions(res.data.interests ?? []);
       } catch (error) {
         console.error("Failed to fetch procedures", error);
       } finally {
@@ -734,13 +709,7 @@ const StatusModal = ({
         payload.appointments.date = new Date().toISOString();
       }
 
-      const res = await fetch(`${API_URL}/${lead.id}`, {
-        method: "PATCH",
-        headers: getAuthHeaders(),
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) throw new Error("Patch lead failed");
+      await api.patch(`/${lead.id}`, payload);
 
       onSave({
         ...lead,

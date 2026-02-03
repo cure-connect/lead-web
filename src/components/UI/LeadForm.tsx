@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { type Lead } from '../../types/index';
+import api from "@/api/api";
 
 interface LeadFormProps {
   lead: Lead | null;
@@ -43,24 +44,10 @@ const extractTimeFromISO = (isoString?: string): string => {
   return `${hours}:${minutes}`;
 };
 
-
 const steps = [
   { label: 'ข้อมูลลูกค้า' },
   { label: 'รายละเอียดนัดหมาย' },
 ];
-
-const API_BASE = import.meta.env.VITE_API_URL;
-const API_KEY = import.meta.env.VITE_API_KEY;
-
-const getAuthHeaders = () => {
-  const token = localStorage.getItem("token");
-  return {
-    "Content-Type": "application/json",
-    "x-api-key": API_KEY,
-    "Authorization": `Bearer ${token}`
-  };
-};
-
 
 const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
 
@@ -98,15 +85,12 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const res = await fetch(`${API_BASE}/setting/gettype`, { 
-          headers: getAuthHeaders() 
-        });
-        const json = await res.json();
+        const res = await api.get("/setting/gettype");
 
-        setInterests(json.interests ?? []);
-        setChannels(json.channels ?? []);
-        setAdmins(json.admins ?? []);
-        setBranches(json.branches ?? []);
+        setInterests(res.data.interests ?? []);
+        setChannels(res.data.channels ?? []);
+        setAdmins(res.data.admins ?? []);
+        setBranches(res.data.branches ?? []);
       } catch (err) {
         console.error("Failed to load dropdown data", err);
       }
