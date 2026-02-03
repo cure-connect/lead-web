@@ -445,8 +445,15 @@ const LeadsPage: React.FC = () => {
                               }}
                             />
                             <Trash2
-                              className="w-4 h-4 text-red-600 cursor-pointer hover:scale-110 transition-transform"
-                              onClick={() => openDeleteModal(lead)}
+                              className={`w-4 h-4 transition-all ${isLeadLocked(lead)
+                                ? "text-gray-300 cursor-not-allowed opacity-50"
+                                : "w-4 h-4 text-red-600 cursor-pointer hover:scale-110 transition-transform"
+                                }`}
+                              onClick={() => {
+                                if (!isLeadLocked(lead)) {
+                                  openDeleteModal(lead)
+                                }
+                              }}
                             />
                           </div>
                         </td>

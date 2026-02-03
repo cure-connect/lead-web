@@ -33,7 +33,9 @@ export default function SettingsPage() {
   });
 
   const [inputs, setInputs] = useState<Record<string, { name: string; price?: string }>>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [editOpen, setEditOpen] = useState(false);
+  const [editOpen_error, setEditOpenError] = useState("");
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   const [currentSection, setCurrentSection] = useState<string | null>(null);
@@ -94,6 +96,7 @@ export default function SettingsPage() {
       }));
     } catch (err) {
       console.error("Failed to create", sectionKey, err);
+      setErrors(prev => ({ ...prev, [sectionKey]: "เกิดข้อผิดพลาด กรุณาลองใหม่" }));
     }
   };
 
@@ -142,8 +145,10 @@ export default function SettingsPage() {
       }));
 
       setEditOpen(false);
+      setEditOpenError("");
     } catch (err) {
       console.error("Failed to edit", currentSection, err);
+      setEditOpenError("เกิดข้อผิดพลาด กรุณาลองใหม่");
     }
   };
 
@@ -193,14 +198,17 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              <div className="flex flex-col sm:flex-row gap-2 mb-4">
+              <div className="flex flex-col sm:flex-row gap-2 mb-1">
                 {key === "interests" ? (
                   <>
                     <input
                       value={inputs[key]?.name || ""}
-                      onChange={e => setInputs(prev => ({ ...prev, [key]: { ...prev[key], name: e.target.value } }))}
+                      onChange={e => {
+                        setInputs(prev => ({ ...prev, [key]: { ...prev[key], name: e.target.value } }));
+                        if (errors[key]) setErrors(prev => ({ ...prev, [key]: "" }));
+                      }}
                       placeholder="ชื่อหัตถการ"
-                      className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      className={`flex-1 px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none ${errors[key] ? "border-red-400" : "border-gray-200"}`}
                     />
                     <input
                       value={inputs[key]?.price || ""}
@@ -213,7 +221,8 @@ export default function SettingsPage() {
                     />
                     <button
                       onClick={() => createItem(key)}
-                      className="px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex justify-center items-center"
+                      disabled={!inputs[key]?.name?.trim() || !inputs[key]?.price?.trim()}
+                      className="px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex justify-center items-center disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <Plus className="w-5 h-5 sm:w-4 sm:h-4" />
                     </button>
@@ -222,19 +231,27 @@ export default function SettingsPage() {
                   <>
                     <input
                       value={inputs[key]?.name || ""}
-                      onChange={e => setInputs(prev => ({ ...prev, [key]: { name: e.target.value } }))}
+                      onChange={e => {
+                        setInputs(prev => ({ ...prev, [key]: { name: e.target.value } }));
+                        if (errors[key]) setErrors(prev => ({ ...prev, [key]: "" }));
+                      }}
                       placeholder={`เพิ่ม${section.title}`}
-                      className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      className={`flex-1 px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none ${errors[key] ? "border-red-400" : "border-gray-200"}`}
                     />
                     <button
                       onClick={() => createItem(key)}
-                      className="px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex justify-center items-center"
+                      disabled={!inputs[key]?.name?.trim()}
+                      className="px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex justify-center items-center disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <Plus className="w-5 h-5 sm:w-4 sm:h-4" />
                     </button>
                   </>
                 )}
               </div>
+
+              {errors[key] && (
+                <p className="text-xs text-red-500 mb-3 px-1">* {errors[key]}</p>
+              )}
 
               <div className="space-y-2">
                 {section.items.map(item => (
@@ -259,11 +276,11 @@ export default function SettingsPage() {
       </div>
 
       {editOpen && (
-        <Modal title="แก้ไขรายการ" onClose={() => setEditOpen(false)} onConfirm={confirmEdit}>
+        <Modal title="แก้ไขรายการ" onClose={() => { setEditOpen(false); setEditOpenError(""); }} onConfirm={confirmEdit}>
           <input
             value={editValue}
-            onChange={e => setEditValue(e.target.value)}
-            className="w-full px-3 py-2 mb-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+            onChange={e => { setEditValue(e.target.value); setEditOpenError(""); }}
+            className={`w-full px-3 py-2 mb-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none ${editOpen_error ? "border-red-400" : ""}`}
             placeholder="ชื่อ"
           />
           {currentSection === "interests" && (
@@ -276,6 +293,9 @@ export default function SettingsPage() {
               pattern="[0-9]*"
               className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
             />
+          )}
+          {editOpen_error && (
+            <p className="text-xs text-red-500 mt-2">* {editOpen_error}</p>
           )}
         </Modal>
       )}
