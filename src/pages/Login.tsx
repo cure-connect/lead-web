@@ -46,9 +46,11 @@ const Login: React.FC = () => {
       }
 
       const result = await res.json();
+      console.log('result', result)
 
       localStorage.setItem('auth', JSON.stringify(result.data));
-      localStorage.setItem('token', result.data.token);
+      localStorage.setItem('accessToken', result.data.accessToken);
+      localStorage.setItem('refreshToken', result.data.refreshToken)
 
       login(result.data);
 

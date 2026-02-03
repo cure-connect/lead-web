@@ -8,6 +8,7 @@ import {
   Trash2,
   Pencil
 } from "lucide-react";
+import api from "@/api/api";
 
 interface Item {
   _id: string;
@@ -22,18 +23,6 @@ interface SectionData {
   type: string;
   items: Item[];
 }
-
-const BASE_URL = import.meta.env.VITE_API_URL;
-const API_KEY = import.meta.env.VITE_API_KEY;
-
-const getAuthHeaders = () => {
-  const token = localStorage.getItem("token");
-  return {
-    "Content-Type": "application/json",
-    "x-api-key": API_KEY,
-    "Authorization": `Bearer ${token}`
-  };
-};
 
 export default function SettingsPage() {
   const [sections, setSections] = useState<Record<string, SectionData>>({
@@ -57,18 +46,23 @@ export default function SettingsPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
+<<<<<<< HEAD
         const res = await fetch(`${BASE_URL}/setting/gettype`, {
           method: "GET",
           headers: getAuthHeaders()
         });
         const json = await res.json();
 
+=======
+        const res = await api.get("/setting/gettype");
+        console.log("fetchData", res)
+>>>>>>> 6d66396 (add refresh token)
         setSections(prev => ({
           ...prev,
-          admins: { ...prev.admins, items: json.admins ?? [] },
-          interests: { ...prev.interests, items: json.interests ?? [] },
-          branches: { ...prev.branches, items: json.branches ?? [] },
-          channels: { ...prev.channels, items: json.channels ?? [] },
+          admins: { ...prev.admins, items: res.data.admins ?? [] },
+          interests: { ...prev.interests, items: res.data.interests ?? [] },
+          branches: { ...prev.branches, items: res.data.branches ?? [] },
+          channels: { ...prev.channels, items: res.data.channels ?? [] },
         }));
       } catch (err) {
         console.error("Failed to load settings", err);
@@ -77,6 +71,7 @@ export default function SettingsPage() {
     fetchData();
   }, []);
 
+
   const createItem = async (sectionKey: string) => {
     const inputData = inputs[sectionKey];
     const section = sections[sectionKey];
@@ -84,6 +79,7 @@ export default function SettingsPage() {
     if (!inputData?.name?.trim()) return;
     if (sectionKey === "interests" && !inputData.price?.trim()) return;
 
+<<<<<<< HEAD
     const trimmedName = inputData.name.trim().toLowerCase();
     const isDuplicate = section.items.some(
       item => item.name.toLowerCase() === trimmedName
@@ -96,6 +92,11 @@ export default function SettingsPage() {
     const payload: Record<string, unknown> = {
       type: section.type,
       name: inputData.name.trim()
+=======
+    const payload: Record<string, unknown> = {
+      type: section.type,
+      name: inputData.name.trim(),
+>>>>>>> 6d66396 (add refresh token)
     };
 
     if (sectionKey === "interests") {
@@ -103,12 +104,7 @@ export default function SettingsPage() {
     }
 
     try {
-      const res = await fetch(`${BASE_URL}/setting/createsetting`, {
-        method: "POST",
-        headers: getAuthHeaders(),
-        body: JSON.stringify(payload)
-      });
-      const json = await res.json();
+      const res = await api.post("/setting/createsetting", payload);
 
       if (!res.ok) {
         if (res.status === 409) {
@@ -121,16 +117,27 @@ export default function SettingsPage() {
 
       setSections(prev => ({
         ...prev,
-        [sectionKey]: { ...prev[sectionKey], items: [...prev[sectionKey].items, json.data] }
+        [sectionKey]: {
+          ...prev[sectionKey],
+          items: [...prev[sectionKey].items, res.data.data],
+        },
       }));
 
+<<<<<<< HEAD
       setInputs(prev => ({ ...prev, [sectionKey]: { name: "", price: "" } }));
       setErrors(prev => ({ ...prev, [sectionKey]: "" }));
+=======
+      setInputs(prev => ({
+        ...prev,
+        [sectionKey]: { name: "", price: "" },
+      }));
+>>>>>>> 6d66396 (add refresh token)
     } catch (err) {
       console.error("Failed to create", sectionKey, err);
       setErrors(prev => ({ ...prev, [sectionKey]: "เกิดข้อผิดพลาด กรุณาลองใหม่" }));
     }
   };
+
 
   const openEditModal = (sectionKey: string, item: Item) => {
     setCurrentSection(sectionKey);
@@ -146,7 +153,11 @@ export default function SettingsPage() {
 
     const payload: Record<string, unknown> = {
       type: section.type,
+<<<<<<< HEAD
       name: editValue.trim()
+=======
+      name: editValue.trim(),
+>>>>>>> 6d66396 (add refresh token)
     };
 
     if (currentSection === "interests") {
@@ -154,11 +165,15 @@ export default function SettingsPage() {
     }
 
     try {
+<<<<<<< HEAD
       const res = await fetch(`${BASE_URL}/setting/editsetting/${currentItem._id}`, {
         method: "PATCH",
         headers: getAuthHeaders(),
         body: JSON.stringify(payload)
       });
+=======
+      await api.patch(`/setting/editsetting/${currentItem._id}`, payload);
+>>>>>>> 6d66396 (add refresh token)
 
       if (!res.ok) {
         const json = await res.json();
@@ -176,10 +191,21 @@ export default function SettingsPage() {
           ...prev[currentSection],
           items: prev[currentSection].items.map(i =>
             i._id === currentItem._id
+<<<<<<< HEAD
               ? { ...i, name: editValue, price: currentSection === "interests" ? parseFloat(editPrice) : i.price }
+=======
+              ? {
+                ...i,
+                name: editValue,
+                price:
+                  currentSection === "interests"
+                    ? parseFloat(editPrice)
+                    : i.price,
+              }
+>>>>>>> 6d66396 (add refresh token)
               : i
-          )
-        }
+          ),
+        },
       }));
 
       setEditOpen(false);
@@ -189,6 +215,7 @@ export default function SettingsPage() {
       setEditOpenError("เกิดข้อผิดพลาด กรุณาลองใหม่");
     }
   };
+
 
   const openDeleteModal = (sectionKey: string, item: Item) => {
     setCurrentSection(sectionKey);
@@ -200,23 +227,36 @@ export default function SettingsPage() {
     if (!currentSection || !currentItem) return;
 
     try {
+<<<<<<< HEAD
       await fetch(`${BASE_URL}/setting/deletesetting/${currentItem._id}`, {
         method: "DELETE",
         headers: getAuthHeaders()
       });
+=======
+      await api.delete(`/setting/deletesetting/${currentItem._id}`);
+>>>>>>> 6d66396 (add refresh token)
 
       setSections(prev => ({
         ...prev,
         [currentSection]: {
           ...prev[currentSection],
+<<<<<<< HEAD
           items: prev[currentSection].items.filter(i => i._id !== currentItem._id)
         }
+=======
+          items: prev[currentSection].items.filter(
+            i => i._id !== currentItem._id
+          ),
+        },
+>>>>>>> 6d66396 (add refresh token)
       }));
+
       setDeleteOpen(false);
     } catch (err) {
       console.error("Failed to delete", currentSection, err);
     }
   };
+
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 sm:p-8">
