@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { type Lead } from '../../types/index';
+import { Upload, X, ImageIcon, Loader2 } from 'lucide-react';
 import api from "@/api/api";
 
 interface LeadFormProps {
@@ -70,13 +71,20 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
     note: lead?.note || '',
   });
 
+  // ---- Deposit State ----
+  const [depositEnabled, setDepositEnabled] = useState(false);
+  const [depositAmount, setDepositAmount] = useState('');
+  const [slipUrl, setSlipUrl] = useState<string | null>(null);
+  const [slipPreview, setSlipPreview] = useState<string | null>(null);
+  const [slipUploading, setSlipUploading] = useState(false);
+  const [depositError, setDepositError] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (branches.length > 0 && !lead?.branch) {
       setFormData(prev => ({ ...prev, branch: branches[0].name }));
     }
   }, [branches, lead]);
-
 
   const [interests, setInterests] = useState<{ _id: string, name: string, price: string }[]>([]);
   const [channels, setChannels] = useState<{ _id: string, name: string }[]>([]);
@@ -86,7 +94,6 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
     const fetchData = async () => {
       try {
         const res = await api.get("/setting/gettype");
-
         setInterests(res.data.interests ?? []);
         setChannels(res.data.channels ?? []);
         setAdmins(res.data.admins ?? []);
@@ -95,7 +102,6 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
         console.error("Failed to load dropdown data", err);
       }
     };
-
     fetchData();
   }, []);
 
@@ -109,7 +115,81 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
     return null;
   };
 
+  const validateStep2 = (): string | null => {
+    if (depositEnabled) {
+      if (!depositAmount.trim() || Number(depositAmount) <= 0) {
+        return "กรุณากรอกจำนวนเงินมัดจำ";
+      }
+      if (!slipUrl) {
+        return "กรุณาอัปโหลดรูปสลิปการโอนเงิน";
+      }
+    }
+    return null;
+  };
+
+  const handleSlipUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/heic'];
+    if (!allowedTypes.includes(file.type)) {
+      setDepositError('รองรับเฉพาะไฟล์รูปภาพ (JPG, PNG, WEBP)');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setDepositError('ขนาดไฟล์ต้องไม่เกิน 5MB');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => setSlipPreview(reader.result as string);
+    reader.readAsDataURL(file);
+
+    setSlipUploading(true);
+    setDepositError('');
+
+    try {
+      const formData = new FormData();
+      formData.append('slip', file);
+
+      const res = await api.post('/upload/slip', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      setSlipUrl(res.data.data.url);
+    } catch (err: any) {
+      console.error('Upload slip failed', err);
+      setDepositError('อัปโหลดสลิปไม่สำเร็จ กรุณาลองใหม่');
+      setSlipPreview(null);
+    } finally {
+      setSlipUploading(false);
+    }
+  };
+
+  const removeSlip = () => {
+    setSlipUrl(null);
+    setSlipPreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleDepositToggle = () => {
+    const next = !depositEnabled;
+    setDepositEnabled(next);
+    if (!next) {
+      setDepositAmount('');
+      removeSlip();
+      setDepositError('');
+    }
+  };
+
   const handleSubmit = () => {
+    const error = validateStep2();
+    if (error) {
+      setDepositError(error);
+      return;
+    }
+
     const now = new Date();
     const buddhistYear = now.getFullYear() + 543;
     const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -121,7 +201,7 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
         ? 'scheduled'
         : 'pending';
 
-    onSave({
+    const leadData: any = {
       ...(lead || {}),
       ...formData,
       id: lead?.id || '',
@@ -129,7 +209,16 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
       appointmentDate: backendStatus === 'scheduled' ? formData.appointmentDate : undefined,
       appointmentTime: backendStatus === 'scheduled' ? formData.appointmentTime : undefined,
       createdAt,
-    } as unknown as Lead);
+    };
+
+    if (depositEnabled && slipUrl) {
+      leadData.deposit = {
+        amount: Number(depositAmount),
+        slipUrl: slipUrl,
+      };
+    }
+
+    onSave(leadData as Lead);
   };
 
   return (
@@ -181,22 +270,16 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
                 onChange={(e) => {
                   const selected = interests.find(i => i.name === e.target.value);
                   if (!selected) return;
-
                   setFormData({
                     ...formData,
-                    interest: {
-                      name: selected.name,
-                      price: selected.price
-                    }
+                    interest: { name: selected.name, price: selected.price }
                   });
                 }}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
               >
                 <option value="">เลือกความสนใจ</option>
                 {interests.map(i => (
-                  <option key={i._id} value={i.name}>
-                    {i.name}
-                  </option>
+                  <option key={i._id} value={i.name}>{i.name}</option>
                 ))}
               </select>
             </div>
@@ -246,7 +329,6 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
               {branches.length === 0 && <option value="0" disabled>เลือกสาขา</option>}
               {branches.map(b => <option key={b._id} value={b.name}>{b.name}</option>)}
             </select>
-
           </div>
 
           <div className="flex justify-end gap-3">
@@ -308,6 +390,139 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
             </div>
           )}
 
+          <div className="border border-gray-200 rounded-lg p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-sm font-medium text-gray-700">มัดจำ</span>
+                <p className="text-xs text-gray-400 mt-0.5">เปิดเพื่อบันทึกข้อมูลการมัดจำ</p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={depositEnabled}
+                onClick={handleDepositToggle}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${depositEnabled ? 'bg-indigo-600' : 'bg-gray-200'
+                  }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${depositEnabled ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                />
+              </button>
+            </div>
+
+            {depositEnabled && (
+              <div className="space-y-4 pt-2 border-t border-gray-100">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    จำนวนเงินมัดจำ (บาท) *
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="0"
+                      value={depositAmount}
+                      onChange={(e) => {
+                        setDepositAmount(e.target.value.replace(/[^0-9.]/g, ''));
+                        if (depositError) setDepositError('');
+                      }}
+                      className={`w-full px-3 py-2 pr-12 border rounded-md focus:ring-indigo-500 focus:border-indigo-500 ${depositError && (!depositAmount.trim() || Number(depositAmount) <= 0)
+                        ? 'border-red-400' : 'border-gray-300'
+                        }`}
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">
+                      บาท
+                    </span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    สลิปการโอนเงิน *
+                  </label>
+
+                  {!slipPreview ? (
+                    <label
+                      className={`flex flex-col items-center justify-center w-full h-40 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${depositError && !slipUrl
+                        ? 'border-red-400 bg-red-50 hover:bg-red-100'
+                        : 'border-gray-300 bg-gray-50 hover:bg-gray-100'
+                        }`}
+                    >
+                      <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                        <Upload className={`w-8 h-8 mb-2 ${depositError && !slipUrl ? 'text-red-400' : 'text-gray-400'}`} />
+                        <p className="text-sm text-gray-500">
+                          <span className="font-medium text-indigo-600">คลิกเพื่ออัปโหลด</span> หรือลากไฟล์มาวาง
+                        </p>
+                        <p className="text-xs text-gray-400 mt-1">JPG, PNG, WEBP (สูงสุด 5MB)</p>
+                      </div>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/heic"
+                        onChange={handleSlipUpload}
+                        className="hidden"
+                      />
+                    </label>
+                  ) : (
+                    <div className="relative group">
+                      <div className="relative w-full h-48 bg-gray-100 rounded-lg overflow-hidden border border-gray-200">
+                        <img
+                          src={slipPreview}
+                          alt="สลิปการโอน"
+                          className="w-full h-full object-contain"
+                        />
+
+                        {slipUploading && (
+                          <div className="absolute inset-0 bg-white/70 flex flex-col items-center justify-center">
+                            <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+                            <span className="text-sm text-gray-600 mt-2">กำลังอัปโหลด...</span>
+                          </div>
+                        )}
+
+                        {!slipUploading && (
+                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                            <button
+                              type="button"
+                              onClick={removeSlip}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity bg-red-500 hover:bg-red-600 text-white rounded-full p-2 shadow-lg"
+                            >
+                              <X className="w-5 h-5" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between mt-2 px-1">
+                        <div className="flex items-center gap-2 text-sm text-gray-500">
+                          <ImageIcon className="w-4 h-4" />
+                          {slipUploading ? (
+                            <span className="text-indigo-600">กำลังอัปโหลด...</span>
+                          ) : slipUrl ? (
+                            <span className="text-green-600">อัปโหลดสำเร็จ ✓</span>
+                          ) : null}
+                        </div>
+                        {!slipUploading && (
+                          <button
+                            type="button"
+                            onClick={removeSlip}
+                            className="text-xs text-red-500 hover:text-red-700 font-medium"
+                          >
+                            ลบ
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {depositError && (
+              <p className="text-xs text-red-500 px-1">* {depositError}</p>
+            )}
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">รายละเอียดเพิ่มเติม</label>
             <textarea
@@ -322,7 +537,13 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
             <button onClick={() => setStep(1)} className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">ย้อนกลับ</button>
             <div className="flex gap-3">
               <button onClick={onClose} className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">ยกเลิก</button>
-              <button onClick={handleSubmit} className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700">บันทึก</button>
+              <button
+                onClick={handleSubmit}
+                disabled={slipUploading}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                บันทึก
+              </button>
             </div>
           </div>
         </div>

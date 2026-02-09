@@ -42,7 +42,7 @@ const getDaysUntilAppointment = (appointmentDate: string) => {
 
 const isLeadLocked = (lead: Lead): boolean => {
   const hasArrivedStatus = lead.status === "arrived";
-  const hasProcedures = Array.isArray(lead.interest) && lead.interest.length > 0;
+  const hasProcedures = Array.isArray(lead.procedures) && lead.procedures.length > 0;
   const hasPayment = !!(lead.payments && lead.payments.method);
 
   return hasArrivedStatus && hasProcedures && hasPayment;
@@ -93,6 +93,8 @@ const LeadsPage: React.FC = () => {
             : "ยังไม่นัด",
           note: item.note || "",
           payments: item.payments,
+          procedures: Array.isArray(item.procedures) ? item.procedures : [],
+          deposit: item.deposit,
         };
       });
 
@@ -114,9 +116,15 @@ const LeadsPage: React.FC = () => {
 
   const filteredLeads = useMemo(() => {
     const [year, month] = selectedMonth.split("-");
+    const monthPrefix = `${year}-${month}`;
 
     return leads.filter((lead) => {
-      const matchesMonth = lead.createdAt?.startsWith(`${year}-${month}`);
+      // แท็บ "นัดแล้ว" → กรองจากวันที่นัด
+      // แท็บ "ยังไม่นัด" → กรองจากวันที่สร้าง
+      const matchesMonth =
+        activeTab === "scheduled" && lead.appointmentDate
+          ? lead.appointmentDate.startsWith(monthPrefix)
+          : lead.createdAt?.startsWith(monthPrefix);
 
       const matchesSearch =
         searchQuery === "" ||
@@ -129,25 +137,32 @@ const LeadsPage: React.FC = () => {
           ? lead.status === "pending"
           : lead.status !== "pending";
 
-
       return matchesMonth && matchesSearch && matchesTab;
     });
   }, [leads, selectedMonth, searchQuery, activeTab]);
 
   const summary = useMemo(() => {
     const [year, month] = selectedMonth.split("-");
-    const leadsInMonth = leads.filter((lead) =>
-      lead.createdAt?.startsWith(`${year}-${month}`)
+    const monthPrefix = `${year}-${month}`;
+
+    // ทั้งหมด + รอตัดสินใจ → นับจากวันที่สร้าง
+    const leadsCreatedInMonth = leads.filter((lead) =>
+      lead.createdAt?.startsWith(monthPrefix)
     );
+
+    // ทำนัด + ยกเลิก → นับจากวันที่นัด
+    const leadsWithApptInMonth = leads.filter((lead) =>
+      lead.appointmentDate?.startsWith(monthPrefix)
+    );
+
     return {
-      total: leadsInMonth.length,
-      withAppointment: leadsInMonth.filter((l) =>
+      total: leadsCreatedInMonth.length,
+      withAppointment: leadsWithApptInMonth.filter((l) =>
         ["scheduled", "rescheduled"].includes(l.status)
       ).length,
-      waiting: leadsInMonth.filter((l) => l.status === "pending").length,
-      cancelled: leadsInMonth.filter((l) => l.status === "cancelled").length,
+      waiting: leadsCreatedInMonth.filter((l) => l.status === "pending").length,
+      cancelled: leadsWithApptInMonth.filter((l) => l.status === "cancelled").length,
     };
-
   }, [leads, selectedMonth]);
 
   const handleSave = async (lead: Lead) => {
@@ -187,6 +202,9 @@ const LeadsPage: React.FC = () => {
         }
       }
 
+      if (lead.deposit) {
+        payload.deposit = lead.deposit;
+      }
 
       if (!editingLead) {
         payload.clinic = {
@@ -568,14 +586,18 @@ const StatusModal = ({
     Array<{
       name: string;
       price: string;
-      procedureId?: string;
-      readonly?: boolean;
+      commissionRate: number;
     }>
-  >([{ name: "", price: "0", procedureId: undefined, readonly: false }]);
+  >([{ name: "", price: "0", commissionRate: 0 }]);
 
   const [paymentMethod, setPaymentMethod] = useState("");
-  const [installmentMonths, setInstallmentMonths] = useState<number>(0);
-  const [monthlyPayments, setMonthlyPayments] = useState<number[]>([]);
+  const [serviceChargeRate, setServiceChargeRate] = useState<number>(3);
+  const [commissionEnabled, setCommissionEnabled] = useState(false);
+
+  // นัดหมายครั้งถัดไป
+  const [nextAppointmentEnabled, setNextAppointmentEnabled] = useState(false);
+  const [nextAppointmentDate, setNextAppointmentDate] = useState("");
+  const [nextAppointmentTime, setNextAppointmentTime] = useState("");
 
 
   const totalAmount = procedures.reduce(
@@ -583,64 +605,38 @@ const StatusModal = ({
     0
   );
 
-  const [procedureOptions, setProcedureOptions] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+  const serviceChargeAmount = paymentMethod === "card"
+    ? Math.round((totalAmount * serviceChargeRate) / 100 * 100) / 100
+    : 0;
 
-  useEffect(() => {
-    if (
-      selectedStatus === "arrived" &&
-      Array.isArray(lead.interest) &&
-      lead.interest.length > 0 &&
-      procedureOptions.length > 0
-    ) {
-      setProcedures(
-        lead.interest.map((p) => {
-          const matched = procedureOptions.find(
-            (opt) => opt.name === p.name
-          );
+  const netAmount = totalAmount - serviceChargeAmount;
 
-          return {
-            name: p.name,
-            price: String(p.price),
-            procedureId: matched?._id ? String(matched._id) : undefined,
-            readonly: true,
-          };
-        })
-      );
-    }
-  }, [selectedStatus, lead.interest, procedureOptions]);
+  // คำนวณค่าคอมแต่ละหัตถการ — ถ้าบัตรเครดิตให้คิดจากยอดหลังหัก SC
+  const commissionDetails = commissionEnabled
+    ? procedures
+      .filter((p) => p.name && parseFloat(p.price) > 0 && p.commissionRate > 0)
+      .map((p) => {
+        const price = parseFloat(p.price) || 0;
+        const baseAmount =
+          paymentMethod === "card"
+            ? price - Math.round((price * serviceChargeRate) / 100 * 100) / 100
+            : price;
+        const commAmount = Math.round((baseAmount * p.commissionRate) / 100 * 100) / 100;
+        return {
+          procedureName: p.name,
+          baseAmount,
+          rate: p.commissionRate,
+          amount: commAmount,
+        };
+      })
+    : [];
 
-
-  useEffect(() => {
-    const fetchProcedures = async () => {
-      try {
-        setLoading(true);
-        const res = await api.get("/setting/gettype");
-        setProcedureOptions(res.data.interests ?? []);
-      } catch (error) {
-        console.error("Failed to fetch procedures", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchProcedures();
-  }, []);
-
-  useEffect(() => {
-    if (installmentMonths > 0) {
-      setMonthlyPayments((prev) =>
-        Array.from({ length: installmentMonths }, (_, i) => prev[i] || 0)
-      );
-    } else {
-      setMonthlyPayments([]);
-    }
-  }, [installmentMonths]);
+  const totalCommission = commissionDetails.reduce((sum, d) => sum + d.amount, 0);
 
   const addProcedure = () => {
     setProcedures([
       ...procedures,
-      { name: "", price: "0", procedureId: undefined, readonly: false },
+      { name: "", price: "0", commissionRate: 0 },
     ]);
   };
 
@@ -670,20 +666,49 @@ const StatusModal = ({
 
       let payments: any = undefined;
       if (paymentMethod && totalAmount > 0) {
-        if (paymentMethod === "installment") {
-          payments = {
-            method: "installment",
-            amount: totalAmount,
-            installment: {
-              months: installmentMonths,
-              monthlyAmount: monthlyPayments,
-            }
+        const scRate = paymentMethod === "card" ? serviceChargeRate : 0;
+        const scAmount = paymentMethod === "card"
+          ? Math.round((totalAmount * scRate) / 100 * 100) / 100
+          : 0;
+
+        payments = {
+          method: paymentMethod,
+          amount: totalAmount,
+        };
+
+        if (paymentMethod === "card") {
+          payments.serviceCharge = {
+            rate: scRate,
+            amount: scAmount,
+            netAmount: totalAmount - scAmount,
           };
-        } else {
-          payments = {
-            method: paymentMethod,
-            amount: totalAmount,
-          };
+        }
+
+        // Commission
+        if (commissionEnabled) {
+          const details = validProcedures
+            .filter((p) => p.commissionRate > 0)
+            .map((p) => {
+              const price = parseFloat(p.price) || 0;
+              const base =
+                paymentMethod === "card"
+                  ? price - Math.round((price * scRate) / 100 * 100) / 100
+                  : price;
+              const commAmt = Math.round((base * p.commissionRate) / 100 * 100) / 100;
+              return {
+                procedureName: p.name,
+                baseAmount: base,
+                rate: p.commissionRate,
+                amount: commAmt,
+              };
+            });
+
+          if (details.length > 0) {
+            payments.commission = {
+              totalAmount: details.reduce((s, d) => s + d.amount, 0),
+              details,
+            };
+          }
         }
       }
 
@@ -692,10 +717,12 @@ const StatusModal = ({
           status: selectedStatus,
         },
         ...(validProcedures.length > 0 ? {
-          interests: validProcedures.map((p) => ({
+          procedures: validProcedures.map((p) => ({
             name: p.name,
             price: p.price,
-            ...(p.procedureId ? { procedureId: p.procedureId } : {}),
+            ...(commissionEnabled && p.commissionRate > 0
+              ? { commissionRate: p.commissionRate }
+              : {}),
           }))
         } : {}),
         ...(payments ? { payments } : {}),
@@ -717,6 +744,47 @@ const StatusModal = ({
       }
 
       await api.patch(`/${lead.id}`, payload);
+
+      // สร้าง Lead ใหม่สำหรับนัดหมายครั้งถัดไป
+      if (selectedStatus === "arrived" && nextAppointmentEnabled) {
+        const hasNextDate = nextAppointmentDate && nextAppointmentTime;
+
+        const nextLeadPayload: any = {
+          clinic: { branch: lead.branch },
+          patient: {
+            name: lead.name,
+            tel: lead.phone,
+            lineId: lead.lineId || undefined
+          },
+          interests: lead.interest,
+          referralChannel: lead.referralChannel,
+          createdBy: lead.admin,
+          note: "",
+        };
+
+        if (hasNextDate) {
+          // มีวันที่นัด → สถานะ scheduled, createdAt เป็นวันที่ 1 ของเดือนที่นัด
+          const appointmentDate = new Date(nextAppointmentDate);
+          const firstDayOfMonth = new Date(appointmentDate.getFullYear(), appointmentDate.getMonth(), 1);
+
+          nextLeadPayload.appointments = {
+            status: "scheduled",
+            date: `${nextAppointmentDate}T${nextAppointmentTime}:00+07:00`,
+          };
+          nextLeadPayload.overrideCreatedAt = firstDayOfMonth.toISOString();
+        } else {
+          // ไม่มีวันที่นัด → สถานะ pending, createdAt เป็นวันปัจจุบัน (ไม่ต้อง override)
+          nextLeadPayload.appointments = {
+            status: "pending",
+          };
+        }
+
+        try {
+          await api.post("/createlead", nextLeadPayload);
+        } catch (err) {
+          console.error("สร้าง Lead นัดครั้งถัดไปไม่สำเร็จ", err);
+        }
+      }
 
       onSave({
         ...lead,
@@ -787,54 +855,76 @@ const StatusModal = ({
               {procedures.map((procedure, index) => (
                 <div
                   key={index}
-                  className="flex gap-3 items-center bg-gray-50 p-4 rounded-xl"
+                  className="bg-gray-50 p-4 rounded-xl space-y-3"
                 >
-                  <select
-                    value={procedure.procedureId ?? ""}
-                    disabled={procedure.readonly}
-                    onChange={(e) => {
-                      const selectedId = e.target.value;
+                  <div className="flex gap-3 items-end">
+                    <div className="flex-1">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">ชื่อหัตถการ</label>
+                      <input
+                        type="text"
+                        placeholder="ชื่อหัตถการ"
+                        value={procedure.name}
+                        onChange={(e) => updateProcedure(index, "name", e.target.value)}
+                        className="w-full px-3 py-2 border rounded-md bg-white"
+                      />
+                    </div>
 
-                      const selected = procedureOptions.find(
-                        (p) => String(p._id) === selectedId
-                      );
+                    <div className="w-36">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">ราคา (บาท)</label>
+                      <input
+                        type="number"
+                        placeholder="0"
+                        value={procedure.price ?? ""}
+                        onChange={(e) => updateProcedure(index, "price", e.target.value)}
+                        className="w-full px-3 py-2 border rounded-md bg-white text-right"
+                      />
+                    </div>
 
-                      if (!selected) return;
+                    {commissionEnabled && (
+                      <div className="w-28">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">ค่าคอม (%)</label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.1"
+                            value={procedure.commissionRate || ""}
+                            placeholder="0"
+                            onChange={(e) =>
+                              updateProcedure(index, "commissionRate", parseFloat(e.target.value) || 0)
+                            }
+                            className="w-full px-3 py-2 pr-8 border rounded-md text-right bg-white"
+                          />
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">%</span>
+                        </div>
+                      </div>
+                    )}
 
-                      updateProcedure(index, "procedureId", String(selected._id));
-                      updateProcedure(index, "name", selected.name);
-                      updateProcedure(index, "price", String(selected.price));
-                    }}
-                    className="flex-1 px-3 py-2 border rounded-md bg-white disabled:bg-gray-100"
-                  >
+                    {procedures.length > 1 && (
+                      <button
+                        onClick={() => removeProcedure(index)}
+                        className="text-red-500 hover:text-red-700 pb-2"
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
+                    )}
+                  </div>
 
-                    <option value="">
-                      {loading ? "กำลังโหลด..." : "เลือกหัตถการ"}
-                    </option>
-
-                    {procedureOptions.map((option) => (
-                      <option key={option._id} value={String(option._id)}>
-                        {option.name}
-                      </option>
-                    ))}
-                  </select>
-
-                  <input
-                    type="number"
-                    value={procedure.price ?? ""}
-                    disabled
-                    className="w-40 px-3 py-2 border rounded-md bg-gray-100 text-right"
-                  />
-
-                  {!procedure.readonly && (
-                    <button
-                      onClick={() => removeProcedure(index)}
-                      className="text-red-500 hover:text-red-700"
-                    >
-                      <Trash2 className="w-5 h-5" />
-                    </button>
+                  {commissionEnabled && procedure.commissionRate > 0 && parseFloat(procedure.price) > 0 && (
+                    <div className="flex items-center gap-1 pl-1">
+                      <span className="text-xs text-purple-600 font-medium">
+                        ค่าคอม = {(() => {
+                          const price = parseFloat(procedure.price) || 0;
+                          const base =
+                            paymentMethod === "card"
+                              ? price - Math.round((price * serviceChargeRate) / 100 * 100) / 100
+                              : price;
+                          return Math.round((base * procedure.commissionRate) / 100 * 100) / 100;
+                        })().toLocaleString()} บาท
+                      </span>
+                    </div>
                   )}
-
                 </div>
               ))}
 
@@ -845,6 +935,59 @@ const StatusModal = ({
                 <Plus className="w-4 h-4" />
                 เพิ่มหัตถการ
               </button>
+
+              {/* Commission Toggle */}
+              <div className="border border-gray-200 rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-sm font-medium text-gray-700">ค่าคอมมิชชั่น</span>
+                    <p className="text-xs text-gray-400 mt-0.5">เปิดเพื่อใส่ % ค่าคอมในแต่ละหัตถการ</p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={commissionEnabled}
+                    onClick={() => {
+                      const next = !commissionEnabled;
+                      setCommissionEnabled(next);
+                      if (!next) {
+                        setProcedures((prev) =>
+                          prev.map((p) => ({ ...p, commissionRate: 0 }))
+                        );
+                      }
+                    }}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${commissionEnabled ? "bg-purple-600" : "bg-gray-200"
+                      }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${commissionEnabled ? "translate-x-6" : "translate-x-1"
+                        }`}
+                    />
+                  </button>
+                </div>
+
+                {commissionEnabled && totalCommission > 0 && (
+                  <div className="mt-4 pt-3 border-t border-gray-100 space-y-2">
+                    {commissionDetails.map((d, i) => (
+                      <div key={i} className="flex justify-between text-sm">
+                        <span className="text-gray-600">
+                          {d.procedureName} ({d.rate}%
+                          {paymentMethod === "card" ? ` จาก ${d.baseAmount.toLocaleString()} บาท` : ""})
+                        </span>
+                        <span className="font-medium text-purple-600">
+                          {d.amount.toLocaleString()} บาท
+                        </span>
+                      </div>
+                    ))}
+                    <div className="flex justify-between items-center pt-2 border-t border-purple-200">
+                      <span className="text-sm font-semibold text-gray-800">รวมค่าคอมมิชชั่น</span>
+                      <span className="text-lg font-bold text-purple-600">
+                        {totalCommission.toLocaleString()} บาท
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               <div className="flex justify-between items-center bg-indigo-50 px-4 py-3 rounded-lg">
                 <span className="text-sm font-medium">ยอดรวม</span>
@@ -866,53 +1009,176 @@ const StatusModal = ({
                   <option value="cash">เงินสด</option>
                   <option value="transfer">โอนเงิน</option>
                   <option value="card">บัตรเครดิต</option>
-                  <option value="installment">ผ่อนชำระ</option>
                 </select>
               </div>
 
-              {paymentMethod === "installment" && (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-2">
-                      จำนวนเดือน
-                    </label>
-                    <select
-                      value={installmentMonths}
-                      onChange={(e) =>
-                        setInstallmentMonths(parseInt(e.target.value))
-                      }
-                      className="w-full px-3 py-2 border rounded-md"
-                    >
-                      <option value="0">-- เลือก --</option>
-                      <option value="3">3 เดือน</option>
-                      <option value="6">6 เดือน</option>
-                      <option value="12">12 เดือน</option>
-                    </select>
+              {paymentMethod === "card" && totalAmount > 0 && (
+                <div className="space-y-4 bg-amber-50 border border-amber-200 rounded-xl p-4">
+                  <div className="flex items-center gap-2 text-amber-700">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                    </svg>
+                    <span className="text-sm font-semibold">Service Charge บัตรเครดิต</span>
                   </div>
 
-                  {monthlyPayments.length > 0 && (
-                    <div className="grid grid-cols-2 gap-4">
-                      {monthlyPayments.map((value, index) => (
-                        <div key={index}>
-                          <label className="block text-sm font-medium mb-2">
-                            เดือนที่ {index + 1} (บาท)
-                          </label>
-                          <input
-                            type="number"
-                            value={value || ""}
-                            onChange={(e) => {
-                              const newPayments = [...monthlyPayments];
-                              newPayments[index] = parseFloat(e.target.value) || 0;
-                              setMonthlyPayments(newPayments);
-                            }}
-                            className="w-full px-3 py-2 border rounded-md"
-                          />
-                        </div>
-                      ))}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      อัตรา Service Charge (%)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.1"
+                        value={serviceChargeRate}
+                        onChange={(e) => setServiceChargeRate(parseFloat(e.target.value) || 0)}
+                        className="w-full px-3 py-2 pr-10 border rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-medium">
+                        %
+                      </span>
                     </div>
-                  )}
+                  </div>
+
+                  <div className="space-y-2 pt-2 border-t border-amber-200">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">ยอดรวมหัตถการ</span>
+                      <span className="font-medium">{totalAmount.toLocaleString()} บาท</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-red-600">หัก Service Charge ({serviceChargeRate}%)</span>
+                      <span className="font-medium text-red-600">-{serviceChargeAmount.toLocaleString()} บาท</span>
+                    </div>
+                    <div className="flex justify-between items-center pt-2 border-t border-amber-300">
+                      <span className="text-sm font-semibold text-gray-800">ยอดสุทธิที่คลินิกได้รับ</span>
+                      <span className="text-lg font-bold text-green-600">{netAmount.toLocaleString()} บาท</span>
+                    </div>
+                  </div>
                 </div>
               )}
+
+              {/* ======== SUMMARY SECTION ======== */}
+              {paymentMethod && totalAmount > 0 && (
+                <div className="bg-linear-to-br from-slate-50 to-slate-100 border border-slate-200 rounded-xl p-5 space-y-3">
+                  <h4 className="font-semibold text-slate-700 flex items-center gap-2">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                    </svg>
+                    สรุปยอดเงิน
+                  </h4>
+
+                  <div className="space-y-2">
+                    {/* ยอดก่อนหัก */}
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">ยอดก่อนหัก Service Charge</span>
+                      <span className="font-medium">{totalAmount.toLocaleString()} บาท</span>
+                    </div>
+
+                    {/* Service Charge */}
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">หัก Service Charge</span>
+                      <span className={`font-medium ${serviceChargeAmount > 0 ? 'text-red-600' : 'text-gray-500'}`}>
+                        {serviceChargeAmount > 0 ? `-${serviceChargeAmount.toLocaleString()}` : '0'} บาท
+                      </span>
+                    </div>
+
+                    {/* ค่าคอมมิชชัน */}
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">ค่าคอมมิชชัน</span>
+                      <span className={`font-medium ${totalCommission > 0 ? 'text-purple-600' : 'text-gray-500'}`}>
+                        {totalCommission > 0 ? totalCommission.toLocaleString() : '0'} บาท
+                      </span>
+                    </div>
+
+                    {/* หักเงินมัดจำ */}
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">หักเงินมัดจำ</span>
+                      <span className={`font-medium ${(lead.deposit?.amount || 0) > 0 ? 'text-blue-600' : 'text-gray-500'}`}>
+                        {(lead.deposit?.amount || 0) > 0 ? `-${(lead.deposit?.amount || 0).toLocaleString()}` : '0'} บาท
+                      </span>
+                    </div>
+
+                    {/* เส้นแบ่ง */}
+                    <div className="border-t border-slate-300 pt-3 mt-3 space-y-2">
+                      {/* ยอดที่ลูกค้าต้องชำระเพิ่ม */}
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm font-semibold text-gray-800">ยอดที่ลูกค้าต้องชำระเพิ่ม</span>
+                        <span className="text-xl font-bold text-indigo-600">
+                          {Math.max(0, totalAmount - (lead.deposit?.amount || 0)).toLocaleString()} บาท
+                        </span>
+                      </div>
+
+                      {/* ยอดสุทธิที่คลินิกได้รับ */}
+                      <div className="flex justify-between items-center bg-green-50 -mx-5 px-5 py-3 rounded-b-xl -mb-5 border-t border-green-200">
+                        <span className="text-sm font-semibold text-gray-800">ยอดสุทธิที่คลินิกได้รับ</span>
+                        <span className="text-xl font-bold text-green-600">
+                          {(totalAmount - serviceChargeAmount - totalCommission).toLocaleString()} บาท
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ======== NEXT APPOINTMENT SECTION ======== */}
+              <div className="border border-gray-200 rounded-lg p-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-sm font-medium text-gray-700">นัดหมายครั้งถัดไป</span>
+                    <p className="text-xs text-gray-400 mt-0.5">สร้าง Lead ใหม่สำหรับการนัดหมายครั้งถัดไป</p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={nextAppointmentEnabled}
+                    onClick={() => {
+                      const next = !nextAppointmentEnabled;
+                      setNextAppointmentEnabled(next);
+                      if (!next) {
+                        setNextAppointmentDate("");
+                        setNextAppointmentTime("");
+                      }
+                    }}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${nextAppointmentEnabled ? "bg-indigo-600" : "bg-gray-200"}`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${nextAppointmentEnabled ? "translate-x-6" : "translate-x-1"}`}
+                    />
+                  </button>
+                </div>
+
+                {nextAppointmentEnabled && (
+                  <div className="space-y-4 pt-3 border-t border-gray-100">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">วันที่นัด</label>
+                        <input
+                          type="date"
+                          value={nextAppointmentDate}
+                          onChange={(e) => setNextAppointmentDate(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">เวลานัด</label>
+                        <input
+                          type="time"
+                          value={nextAppointmentTime}
+                          onChange={(e) => setNextAppointmentTime(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      {nextAppointmentDate
+                        ? `จะสร้าง Lead ใหม่สถานะ "ทำนัด" วันที่สร้างจะเป็นวันที่ 1 ของเดือน ${new Date(nextAppointmentDate).toLocaleDateString('th-TH', { month: 'long', year: 'numeric' })}`
+                        : 'ไม่ระบุวันที่ = สร้าง Lead ใหม่สถานะ "รอตัดสินใจ" วันที่สร้างเป็นวันนี้'
+                      }
+                    </p>
+                  </div>
+                )}
+              </div>
 
             </div>
           )}
@@ -986,11 +1252,14 @@ const ViewLeadModal = ({
     ? lead.interest.map((i) => `${i.name} (${i.price} บาท)`).join(", ")
     : "ไม่มี";
 
+  const proceduresDisplay = Array.isArray(lead.procedures) && lead.procedures.length > 0
+    ? lead.procedures.map((p) => `${p.name} (${p.price} บาท)`).join(", ")
+    : null;
+
   const paymentMethodMap: Record<string, string> = {
     cash: "เงินสด",
     transfer: "โอนเงิน",
     card: "บัตรเครดิต",
-    installment: "ผ่อนชำระ",
   };
 
 
@@ -1046,6 +1315,13 @@ const ViewLeadModal = ({
             <p className="mt-2 text-gray-900">{interestDisplay}</p>
           </div>
 
+          {proceduresDisplay && (
+            <div>
+              <label className="text-sm font-medium text-gray-500">หัตถการที่ทำ</label>
+              <p className="mt-2 text-gray-900">{proceduresDisplay}</p>
+            </div>
+          )}
+
           <div>
             <label className="text-sm font-medium text-gray-500">สถานะ</label>
             <div className="mt-2">
@@ -1093,16 +1369,42 @@ const ViewLeadModal = ({
                     <p className="mt-2 text-gray-900 font-medium">{lead.payments.amount?.toLocaleString() || "-"} บาท</p>
                   </div>
                 </div>
-                {lead.payments.installment && (
-                  <div>
-                    <label className="text-sm font-medium text-gray-500">ผ่อนชำระ {lead.payments.installment.months} เดือน</label>
-                    <div className="mt-2 space-y-2">
-                      {Array.isArray(lead.payments.installment.monthlyAmount) &&
-                        lead.payments.installment.monthlyAmount.map((amount, index) => (
-                          <p key={index} className="text-gray-900 text-sm">
-                            เดือนที่ {index + 1}: {amount?.toLocaleString() || "-"} บาท
-                          </p>
-                        ))}
+                {lead.payments.serviceCharge && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-2">
+                    <label className="text-sm font-semibold text-amber-700">Service Charge บัตรเครดิต</label>
+                    <div className="space-y-1 mt-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">อัตรา Service Charge</span>
+                        <span className="font-medium">{lead.payments.serviceCharge.rate}%</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-red-600">จำนวนเงินที่หัก</span>
+                        <span className="font-medium text-red-600">-{lead.payments.serviceCharge.amount?.toLocaleString()} บาท</span>
+                      </div>
+                      <div className="flex justify-between text-sm pt-1 border-t border-amber-200">
+                        <span className="font-semibold text-gray-800">ยอดสุทธิที่คลินิกได้รับ</span>
+                        <span className="font-bold text-green-600">{lead.payments.serviceCharge.netAmount?.toLocaleString()} บาท</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {lead.payments.commission && lead.payments.commission.totalAmount > 0 && (
+                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 space-y-2">
+                    <label className="text-sm font-semibold text-purple-700">ค่าคอมมิชชั่น</label>
+                    <div className="space-y-1 mt-2">
+                      {lead.payments.commission.details?.map((d, i) => (
+                        <div key={i} className="flex justify-between text-sm">
+                          <span className="text-gray-600">
+                            {d.procedureName} ({d.rate}%
+                            {lead.payments?.serviceCharge ? ` จาก ${d.baseAmount?.toLocaleString()} บาท` : ""})
+                          </span>
+                          <span className="font-medium text-purple-600">{d.amount?.toLocaleString()} บาท</span>
+                        </div>
+                      ))}
+                      <div className="flex justify-between text-sm pt-1 border-t border-purple-200">
+                        <span className="font-semibold text-gray-800">รวมค่าคอมมิชชั่น</span>
+                        <span className="font-bold text-purple-600">{lead.payments.commission.totalAmount?.toLocaleString()} บาท</span>
+                      </div>
                     </div>
                   </div>
                 )}
