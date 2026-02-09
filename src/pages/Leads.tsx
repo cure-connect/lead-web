@@ -119,8 +119,8 @@ const LeadsPage: React.FC = () => {
     const monthPrefix = `${year}-${month}`;
 
     return leads.filter((lead) => {
-      // แท็บ "นัดแล้ว" → กรองจากวันที่นัด
-      // แท็บ "ยังไม่นัด" → กรองจากวันที่สร้าง
+      // แท็บ "นัดแล้ว" > กรองจากวันที่นัด
+      // แท็บ "ยังไม่นัด" > กรองจากวันที่สร้าง
       const matchesMonth =
         activeTab === "scheduled" && lead.appointmentDate
           ? lead.appointmentDate.startsWith(monthPrefix)
@@ -145,12 +145,12 @@ const LeadsPage: React.FC = () => {
     const [year, month] = selectedMonth.split("-");
     const monthPrefix = `${year}-${month}`;
 
-    // ทั้งหมด + รอตัดสินใจ → นับจากวันที่สร้าง
+    // ทั้งหมด + รอตัดสินใจ > นับจากวันที่สร้าง
     const leadsCreatedInMonth = leads.filter((lead) =>
       lead.createdAt?.startsWith(monthPrefix)
     );
 
-    // ทำนัด + ยกเลิก → นับจากวันที่นัด
+    // ทำนัด + ยกเลิก > นับจากวันที่นัด
     const leadsWithApptInMonth = leads.filter((lead) =>
       lead.appointmentDate?.startsWith(monthPrefix)
     );
@@ -204,6 +204,8 @@ const LeadsPage: React.FC = () => {
 
       if (lead.deposit) {
         payload.deposit = lead.deposit;
+      } else if (lead.deposit === null) {
+        payload.deposit = null;
       }
 
       if (!editingLead) {
@@ -760,10 +762,10 @@ const StatusModal = ({
           referralChannel: lead.referralChannel,
           createdBy: lead.admin,
           note: "",
+          previousAppointmentId: lead.id,
         };
 
         if (hasNextDate) {
-          // มีวันที่นัด → สถานะ scheduled, createdAt เป็นวันที่ 1 ของเดือนที่นัด
           const appointmentDate = new Date(nextAppointmentDate);
           const firstDayOfMonth = new Date(appointmentDate.getFullYear(), appointmentDate.getMonth(), 1);
 
@@ -773,7 +775,6 @@ const StatusModal = ({
           };
           nextLeadPayload.overrideCreatedAt = firstDayOfMonth.toISOString();
         } else {
-          // ไม่มีวันที่นัด → สถานะ pending, createdAt เป็นวันปัจจุบัน (ไม่ต้อง override)
           nextLeadPayload.appointments = {
             status: "pending",
           };
@@ -936,7 +937,6 @@ const StatusModal = ({
                 เพิ่มหัตถการ
               </button>
 
-              {/* Commission Toggle */}
               <div className="border border-gray-200 rounded-lg p-4">
                 <div className="flex items-center justify-between">
                   <div>
@@ -1058,7 +1058,6 @@ const StatusModal = ({
                 </div>
               )}
 
-              {/* ======== SUMMARY SECTION ======== */}
               {paymentMethod && totalAmount > 0 && (
                 <div className="bg-linear-to-br from-slate-50 to-slate-100 border border-slate-200 rounded-xl p-5 space-y-3">
                   <h4 className="font-semibold text-slate-700 flex items-center gap-2">
@@ -1069,13 +1068,11 @@ const StatusModal = ({
                   </h4>
 
                   <div className="space-y-2">
-                    {/* ยอดก่อนหัก */}
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-600">ยอดก่อนหัก Service Charge</span>
                       <span className="font-medium">{totalAmount.toLocaleString()} บาท</span>
                     </div>
 
-                    {/* Service Charge */}
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-600">หัก Service Charge</span>
                       <span className={`font-medium ${serviceChargeAmount > 0 ? 'text-red-600' : 'text-gray-500'}`}>
@@ -1083,7 +1080,6 @@ const StatusModal = ({
                       </span>
                     </div>
 
-                    {/* ค่าคอมมิชชัน */}
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-600">ค่าคอมมิชชัน</span>
                       <span className={`font-medium ${totalCommission > 0 ? 'text-purple-600' : 'text-gray-500'}`}>
@@ -1091,7 +1087,6 @@ const StatusModal = ({
                       </span>
                     </div>
 
-                    {/* หักเงินมัดจำ */}
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-600">หักเงินมัดจำ</span>
                       <span className={`font-medium ${(lead.deposit?.amount || 0) > 0 ? 'text-blue-600' : 'text-gray-500'}`}>
@@ -1099,9 +1094,7 @@ const StatusModal = ({
                       </span>
                     </div>
 
-                    {/* เส้นแบ่ง */}
                     <div className="border-t border-slate-300 pt-3 mt-3 space-y-2">
-                      {/* ยอดที่ลูกค้าต้องชำระเพิ่ม */}
                       <div className="flex justify-between items-center">
                         <span className="text-sm font-semibold text-gray-800">ยอดที่ลูกค้าต้องชำระเพิ่ม</span>
                         <span className="text-xl font-bold text-indigo-600">
@@ -1109,7 +1102,6 @@ const StatusModal = ({
                         </span>
                       </div>
 
-                      {/* ยอดสุทธิที่คลินิกได้รับ */}
                       <div className="flex justify-between items-center bg-green-50 -mx-5 px-5 py-3 rounded-b-xl -mb-5 border-t border-green-200">
                         <span className="text-sm font-semibold text-gray-800">ยอดสุทธิที่คลินิกได้รับ</span>
                         <span className="text-xl font-bold text-green-600">
@@ -1121,7 +1113,6 @@ const StatusModal = ({
                 </div>
               )}
 
-              {/* ======== NEXT APPOINTMENT SECTION ======== */}
               <div className="border border-gray-200 rounded-lg p-4 space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
@@ -1249,11 +1240,11 @@ const ViewLeadModal = ({
   onClose: () => void;
 }) => {
   const interestDisplay = Array.isArray(lead.interest)
-    ? lead.interest.map((i) => `${i.name} (${i.price} บาท)`).join(", ")
+    ? lead.interest.map((i) => `${i.name} (${Number(i.price).toLocaleString()} บาท)`).join(", ")
     : "ไม่มี";
 
   const proceduresDisplay = Array.isArray(lead.procedures) && lead.procedures.length > 0
-    ? lead.procedures.map((p) => `${p.name} (${p.price} บาท)`).join(", ")
+    ? lead.procedures
     : null;
 
   const paymentMethodMap: Record<string, string> = {
@@ -1262,172 +1253,222 @@ const ViewLeadModal = ({
     card: "บัตรเครดิต",
   };
 
+  const statusConfig: Record<string, { bg: string; text: string; label: string }> = {
+    pending: { bg: "bg-orange-100", text: "text-orange-700", label: "รอดำเนินการ" },
+    scheduled: { bg: "bg-blue-100", text: "text-blue-700", label: "นัดหมายแล้ว" },
+    rescheduled: { bg: "bg-yellow-100", text: "text-yellow-700", label: "เลื่อนนัด" },
+    arrived: { bg: "bg-green-100", text: "text-green-700", label: "มาตามนัด" },
+    cancelled: { bg: "bg-red-100", text: "text-red-700", label: "ยกเลิก" },
+  };
+
+  const status = statusConfig[lead.status] || statusConfig.pending;
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="flex justify-between items-center px-6 py-4 border-b">
-          <h2 className="text-lg font-semibold">รายละเอียด Lead</h2>
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-2 sm:p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[95vh] sm:max-h-[90vh] flex flex-col">
+
+        <div className="flex justify-between items-center px-4 sm:px-6 py-4 border-b bg-white rounded-t-2xl shrink-0">
+          <div>
+            <h2 className="text-lg sm:text-xl font-bold text-gray-800">รายละเอียด Lead</h2>
+            <p className="text-xs sm:text-sm text-gray-500 mt-0.5">{lead.name}</p>
+          </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-full hover:bg-gray-100"
+            className="p-2 rounded-full hover:bg-gray-100 transition-colors"
           >
             <X className="w-5 h-5 text-gray-500" />
           </button>
         </div>
 
-        <div className="p-6 space-y-6">
-          <div className="grid grid-cols-2 gap-6">
-            <div>
-              <label className="text-sm font-medium text-gray-500">ชื่อนามสกุล</label>
-              <p className="mt-2 text-gray-900 font-medium">{lead.name}</p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-500">เบอร์ติดต่อ</label>
-              <p className="mt-2 text-gray-900 font-medium">{lead.phone}</p>
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
+
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className={`inline-flex items-center px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-full ${status.bg} ${status.text}`}>
+              {status.label}
+            </span>
+            {lead.status !== "pending" && lead.appointmentDateDisplay && !lead.appointmentDateDisplay.includes("1970") && (
+              <span className="text-xs sm:text-sm text-gray-500">
+                📅 {lead.appointmentDateDisplay}
+              </span>
+            )}
+          </div>
+
+          <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+            <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+              <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></span>
+              ข้อมูลลูกค้า
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <InfoItem label="ชื่อนามสกุล" value={lead.name} />
+              <InfoItem label="เบอร์ติดต่อ" value={lead.phone} />
+              <InfoItem label="Line ID" value={lead.lineId || "-"} />
+              <InfoItem label="ช่องทางที่รู้จัก" value={lead.referralChannel || "-"} />
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-6">
-            <div>
-              <label className="text-sm font-medium text-gray-500">Line ID</label>
-              <p className="mt-2 text-gray-900">{lead.lineId || "-"}</p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-500">ช่องทางที่รู้จัก</label>
-              <p className="mt-2 text-gray-900">{lead.referralChannel || "-"}</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-6">
-            <div>
-              <label className="text-sm font-medium text-gray-500">สาขา</label>
-              <p className="mt-2 text-gray-900">{lead.branch || "-"}</p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-500">แอดมิน</label>
-              <p className="mt-2 text-gray-900">{lead.admin || "-"}</p>
+          <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+            <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+              <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></span>
+              ข้อมูลคลินิก
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <InfoItem label="สาขา" value={lead.branch || "-"} />
+              <InfoItem label="แอดมิน" value={lead.admin || "-"} />
             </div>
           </div>
 
-          <div>
-            <label className="text-sm font-medium text-gray-500">ความสนใจ(หัตถการ)</label>
-            <p className="mt-2 text-gray-900">{interestDisplay}</p>
+          <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+            <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+              <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></span>
+              ความสนใจ (หัตถการ)
+            </h3>
+            <p className="text-sm text-gray-800">{interestDisplay}</p>
           </div>
 
           {proceduresDisplay && (
-            <div>
-              <label className="text-sm font-medium text-gray-500">หัตถการที่ทำ</label>
-              <p className="mt-2 text-gray-900">{proceduresDisplay}</p>
-            </div>
-          )}
-
-          <div>
-            <label className="text-sm font-medium text-gray-500">สถานะ</label>
-            <div className="mt-2">
-              <span className={`inline-flex items-center justify-center px-4 py-2 text-xs font-semibold rounded-md
-                ${lead.status === "scheduled"
-                  ? "bg-blue-100 text-blue-700"
-                  : lead.status === "rescheduled"
-                    ? "bg-yellow-100 text-yellow-700"
-                    : lead.status === "arrived"
-                      ? "bg-green-100 text-green-700"
-                      : lead.status === "cancelled"
-                        ? "bg-red-100 text-red-700"
-                        : lead.status === "pending"
-                          ? "bg-orange-100 text-orange-700"
-                          : "bg-gray-100 text-gray-700"
-                }`}
-              >
-                {statusLabel[lead.status] || lead.status}
-              </span>
-            </div>
-          </div>
-
-          {lead.appointmentDate && (
-            <div className="grid grid-cols-2 gap-6">
-              <div>
-                <label className="text-sm font-medium text-gray-500">วันที่นัด</label>
-                <p className="mt-2 text-gray-900">{lead.appointmentDateDisplay || "-"}</p>
+            <div className="bg-emerald-50 rounded-xl p-4 space-y-3">
+              <h3 className="text-sm font-semibold text-emerald-700 flex items-center gap-2">
+                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
+                หัตถการที่ทำ
+              </h3>
+              <div className="space-y-2">
+                {proceduresDisplay.map((p, i) => (
+                  <div key={i} className="flex justify-between items-center text-sm bg-white rounded-lg px-3 py-2">
+                    <span className="text-gray-700">{p.name}</span>
+                    <span className="font-medium text-emerald-600">{Number(p.price).toLocaleString()} บาท</span>
+                  </div>
+                ))}
               </div>
             </div>
           )}
 
-          {lead.payments && (
-            <div className="border-t pt-6">
-              <h3 className="text-sm font-semibold text-gray-700 mb-4">ข้อมูลการชำระเงิน</h3>
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-6">
-                  <div>
-                    <label className="text-sm font-medium text-gray-500">วิธีชำระเงิน</label>
-                    <p className="mt-2 text-gray-900">
-                      {paymentMethodMap[lead.payments?.method] || "-"}
-                    </p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-500">จำนวนเงิน</label>
-                    <p className="mt-2 text-gray-900 font-medium">{lead.payments.amount?.toLocaleString() || "-"} บาท</p>
+          {lead.deposit && (
+            <div className="bg-blue-50 rounded-xl p-4 space-y-3">
+              <h3 className="text-sm font-semibold text-blue-700 flex items-center gap-2">
+                <span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span>
+                ข้อมูลมัดจำ
+              </h3>
+              <div className="flex justify-between items-center text-sm bg-white rounded-lg px-3 py-2">
+                <span className="text-gray-600">จำนวนเงินมัดจำ</span>
+                <span className="font-bold text-blue-600">{lead.deposit.amount?.toLocaleString()} บาท</span>
+              </div>
+              {lead.deposit.slipUrl && (
+                <div className="mt-3">
+                  <label className="text-xs font-medium text-gray-500 block mb-2">สลิปการโอนเงิน</label>
+                  <div
+                    className="relative bg-white rounded-lg overflow-hidden border border-blue-200 cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => {
+                      const url = lead.deposit?.slipUrl?.startsWith('http')
+                        ? lead.deposit.slipUrl
+                        : `${import.meta.env.VITE_API_URL || ''}${lead.deposit?.slipUrl}`;
+                      window.open(url, '_blank');
+                    }}
+                  >
+                    <img
+                      src={lead.deposit.slipUrl.startsWith('http')
+                        ? lead.deposit.slipUrl
+                        : `${import.meta.env.VITE_API_URL || ''}${lead.deposit.slipUrl}`}
+                      alt="สลิปการโอน"
+                      className="w-full max-h-48 object-contain"
+                    />
+                    <div className="absolute inset-0 bg-black/0 hover:bg-black/10 transition-colors flex items-center justify-center">
+                      <span className="opacity-0 hover:opacity-100 text-white text-xs bg-black/50 px-2 py-1 rounded">
+                        คลิกเพื่อดูขนาดเต็ม
+                      </span>
+                    </div>
                   </div>
                 </div>
-                {lead.payments.serviceCharge && (
-                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-2">
-                    <label className="text-sm font-semibold text-amber-700">Service Charge บัตรเครดิต</label>
-                    <div className="space-y-1 mt-2">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">อัตรา Service Charge</span>
-                        <span className="font-medium">{lead.payments.serviceCharge.rate}%</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-red-600">จำนวนเงินที่หัก</span>
-                        <span className="font-medium text-red-600">-{lead.payments.serviceCharge.amount?.toLocaleString()} บาท</span>
-                      </div>
-                      <div className="flex justify-between text-sm pt-1 border-t border-amber-200">
-                        <span className="font-semibold text-gray-800">ยอดสุทธิที่คลินิกได้รับ</span>
-                        <span className="font-bold text-green-600">{lead.payments.serviceCharge.netAmount?.toLocaleString()} บาท</span>
-                      </div>
+              )}
+            </div>
+          )}
+
+          {lead.status === "arrived" && (
+            <div className="bg-violet-50 rounded-xl p-4 space-y-3">
+              <h3 className="text-sm font-semibold text-violet-700 flex items-center gap-2">
+                <span className="w-1.5 h-1.5 bg-violet-500 rounded-full"></span>
+                ข้อมูลการชำระเงิน
+              </h3>
+
+              {lead.payments ? (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div className="bg-white rounded-lg px-3 py-2">
+                      <p className="text-xs text-gray-500">วิธีชำระเงิน</p>
+                      <p className="text-sm font-medium text-gray-800">{paymentMethodMap[lead.payments?.method] || "-"}</p>
+                    </div>
+                    <div className="bg-white rounded-lg px-3 py-2">
+                      <p className="text-xs text-gray-500">จำนวนเงิน</p>
+                      <p className="text-sm font-bold text-violet-600">{lead.payments.amount?.toLocaleString()} บาท</p>
                     </div>
                   </div>
-                )}
-                {lead.payments.commission && lead.payments.commission.totalAmount > 0 && (
-                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 space-y-2">
-                    <label className="text-sm font-semibold text-purple-700">ค่าคอมมิชชั่น</label>
-                    <div className="space-y-1 mt-2">
-                      {lead.payments.commission.details?.map((d, i) => (
-                        <div key={i} className="flex justify-between text-sm">
-                          <span className="text-gray-600">
-                            {d.procedureName} ({d.rate}%
-                            {lead.payments?.serviceCharge ? ` จาก ${d.baseAmount?.toLocaleString()} บาท` : ""})
-                          </span>
-                          <span className="font-medium text-purple-600">{d.amount?.toLocaleString()} บาท</span>
+
+                  {lead.payments.serviceCharge && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
+                      <p className="text-xs font-semibold text-amber-700">Service Charge บัตรเครดิต</p>
+                      <div className="space-y-1 text-xs sm:text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">อัตรา</span>
+                          <span className="font-medium">{lead.payments.serviceCharge.rate}%</span>
                         </div>
-                      ))}
-                      <div className="flex justify-between text-sm pt-1 border-t border-purple-200">
-                        <span className="font-semibold text-gray-800">รวมค่าคอมมิชชั่น</span>
-                        <span className="font-bold text-purple-600">{lead.payments.commission.totalAmount?.toLocaleString()} บาท</span>
+                        <div className="flex justify-between">
+                          <span className="text-red-600">จำนวนที่หัก</span>
+                          <span className="font-medium text-red-600">-{lead.payments.serviceCharge.amount?.toLocaleString()} บาท</span>
+                        </div>
+                        <div className="flex justify-between pt-1 border-t border-amber-200">
+                          <span className="font-semibold text-gray-800">ยอดสุทธิ</span>
+                          <span className="font-bold text-green-600">{lead.payments.serviceCharge.netAmount?.toLocaleString()} บาท</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
-              </div>
+                  )}
+
+                  {lead.payments.commission && lead.payments.commission.totalAmount > 0 && (
+                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 space-y-2">
+                      <p className="text-xs font-semibold text-purple-700">ค่าคอมมิชชั่น</p>
+                      <div className="space-y-1 text-xs sm:text-sm">
+                        {lead.payments.commission.details?.map((d, i) => (
+                          <div key={i} className="flex justify-between">
+                            <span className="text-gray-600 truncate mr-2">
+                              {d.procedureName} ({d.rate}%)
+                            </span>
+                            <span className="font-medium text-purple-600 whitespace-nowrap">{d.amount?.toLocaleString()} บาท</span>
+                          </div>
+                        ))}
+                        <div className="flex justify-between pt-1 border-t border-purple-200">
+                          <span className="font-semibold text-gray-800">รวม</span>
+                          <span className="font-bold text-purple-600">{lead.payments.commission.totalAmount?.toLocaleString()} บาท</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="bg-white rounded-lg px-4 py-6 text-center">
+                  <p className="text-sm text-gray-400">ยังไม่มีข้อมูลการชำระเงิน</p>
+                </div>
+              )}
             </div>
           )}
 
           {lead.note && (
-            <div className="border-t pt-6">
-              <label className="text-sm font-medium text-gray-500">หมายเหตุ</label>
-              <p className="mt-2 text-gray-900 whitespace-pre-wrap">{lead.note}</p>
+            <div className="bg-gray-50 rounded-xl p-4 space-y-2">
+              <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                <span className="w-1.5 h-1.5 bg-gray-500 rounded-full"></span>
+                หมายเหตุ
+              </h3>
+              <p className="text-sm text-gray-700 whitespace-pre-wrap bg-white rounded-lg p-3">{lead.note}</p>
             </div>
           )}
 
-          <div className="text-xs text-gray-400 border-t pt-4">
-            <p>สร้างเมื่อ: {lead.createdAtDisplay}</p>
+          <div className="text-xs text-gray-400 text-center pt-2">
+            สร้างเมื่อ: {lead.createdAtDisplay}
           </div>
         </div>
 
-        <div className="flex justify-end px-6 py-4 border-t bg-gray-50 rounded-b-2xl">
+        <div className="flex justify-end px-4 sm:px-6 py-4 border-t bg-gray-50 rounded-b-2xl shrink-0">
           <button
             onClick={onClose}
-            className="px-5 py-2 bg-indigo-600 text-white rounded-md text-sm hover:bg-indigo-700"
+            className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
           >
             ปิด
           </button>
@@ -1436,6 +1477,13 @@ const ViewLeadModal = ({
     </div>
   );
 };
+
+const InfoItem = ({ label, value }: { label: string; value: string }) => (
+  <div className="bg-white rounded-lg px-3 py-2">
+    <p className="text-xs text-gray-500">{label}</p>
+    <p className="text-sm font-medium text-gray-800 truncate">{value}</p>
+  </div>
+);
 
 
 export default LeadsPage;

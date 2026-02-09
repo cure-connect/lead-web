@@ -81,6 +81,26 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    if (lead?.deposit) {
+      setDepositEnabled(true);
+      setDepositAmount(String(lead.deposit.amount || ''));
+      if (lead.deposit.slipUrl) {
+        setSlipUrl(lead.deposit.slipUrl);
+        const baseUrl = import.meta.env.VITE_API_URL || '';
+        const fullUrl = lead.deposit.slipUrl.startsWith('http')
+          ? lead.deposit.slipUrl
+          : `${baseUrl}${lead.deposit.slipUrl}`;
+        setSlipPreview(fullUrl);
+      }
+    } else {
+      setDepositEnabled(false);
+      setDepositAmount('');
+      setSlipUrl(null);
+      setSlipPreview(null);
+    }
+  }, [lead]);
+
+  useEffect(() => {
     if (branches.length > 0 && !lead?.branch) {
       setFormData(prev => ({ ...prev, branch: branches[0].name }));
     }
@@ -216,6 +236,8 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
         amount: Number(depositAmount),
         slipUrl: slipUrl,
       };
+    } else if (lead?.deposit && !depositEnabled) {
+      leadData.deposit = null;
     }
 
     onSave(leadData as Lead);
