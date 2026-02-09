@@ -9,10 +9,25 @@ export interface LeadInterest {
 export interface LeadPayment {
   method: string;
   amount: number;
-  installment?: {
-    months: number;
-    monthlyAmount: number[];
+  serviceCharge?: {
+    rate: number;
+    amount: number;
+    netAmount: number;
   };
+  commission?: {
+    totalAmount: number;
+    details: Array<{
+      procedureName: string;
+      baseAmount: number;
+      rate: number;
+      amount: number;
+    }>;
+  };
+}
+
+export interface LeadDeposit {
+  amount: number;
+  slipUrl: string;
 }
 
 export interface Lead {
@@ -39,10 +54,16 @@ export interface Lead {
 
   appointmentDate?: string;
   appointmentTime?: string;
-  
+
   appointmentDateDisplay?: string;
-  createdAtDisplay:string
+  createdAtDisplay: string
   note: string;
   createdAt: string;
   payments?: LeadPayment;
+  deposit?: LeadDeposit;
+  procedures?: Array<{
+    name: string;
+    price: string;
+    commissionRate?: number;
+  }>;
 }
