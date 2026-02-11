@@ -30,6 +30,7 @@ type LeadFormState = {
 const extractDateFromISO = (isoString?: string): string => {
   if (!isoString) return '';
   const date = new Date(isoString);
+  if (isNaN(date.getTime()) || date.getFullYear() < 1971) return '';
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
@@ -39,6 +40,7 @@ const extractDateFromISO = (isoString?: string): string => {
 const extractTimeFromISO = (isoString?: string): string => {
   if (!isoString) return '';
   const date = new Date(isoString);
+  if (isNaN(date.getTime()) || date.getFullYear() < 1971) return '';
   const hours = String(date.getHours()).padStart(2, "0");
   const minutes = String(date.getMinutes()).padStart(2, "0");
   return `${hours}:${minutes}`;
@@ -63,7 +65,7 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
     lineId: lead?.lineId || '',
     admin: lead?.admin || '',
     branch: lead?.branch || '',
-    status: lead?.status === 'scheduled' || lead?.status === 'rescheduled' ? 'ทำนัด' : 'pending',
+    status: lead?.status === 'scheduled' || lead?.status === 'rescheduled' ? 'ทำนัด' : 'รอตัดสินใจ',
     appointmentDate: extractDateFromISO(lead?.appointmentDate),
     appointmentTime: extractTimeFromISO(lead?.appointmentDate),
     note: lead?.note || '',
@@ -436,21 +438,14 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
           </div>
 
           {formData.status === 'ทำนัด' && (
-            <div className="space-y-5">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-                <div className="space-y-1.5">
-                  <label
-                    htmlFor="appt-date"
-                    className="block text-sm font-medium text-gray-700"
-                  >
-                    วันที่นัด
-                  </label>
-                  <input
-                    id="appt-date"
-                    type="date"
-                    value={formData.appointmentDate}
-                    onChange={(e) => setFormData(prev => ({ ...prev, appointmentDate: e.target.value }))}
-                    className={`
+            <div className="flex gap-3 sm:gap-4">
+              <div className="flex-1 min-w-0">
+                <label className="block text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">วันที่นัด</label>
+                <input
+                  type="date"
+                  value={formData.appointmentDate}
+                  onChange={(e) => setFormData({ ...formData, appointmentDate: e.target.value })}
+                  className={`
                       block w-full px-4 py-3.5
                       border border-gray-300 rounded-lg
                       text-base leading-tight
@@ -458,22 +453,15 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
                       min-h-[52px]
                       appearance-none
                     `}
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label
-                    htmlFor="appt-time"
-                    className="block text-sm font-medium text-gray-700"
-                  >
-                    เวลานัด
-                  </label>
-                  <input
-                    id="appt-time"
-                    type="time"
-                    value={formData.appointmentTime}
-                    onChange={(e) => setFormData(prev => ({ ...prev, appointmentTime: e.target.value }))}
-                    className={`
+                />
+              </div>
+              <div className="flex-1 min-w-0">
+                <label className="block text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">เวลานัด</label>
+                <input
+                  type="time"
+                  value={formData.appointmentTime}
+                  onChange={(e) => setFormData({ ...formData, appointmentTime: e.target.value })}
+                  className={`
                       block w-full px-4 py-3.5
                       border border-gray-300 rounded-lg
                       text-base leading-tight
@@ -481,8 +469,7 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
                       min-h-[52px]
                       appearance-none
                     `}
-                  />
-                </div>
+                />
               </div>
             </div>
           )}
