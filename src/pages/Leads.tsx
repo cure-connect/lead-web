@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { Search, Plus, Edit2, Trash2, X, Users, CalendarCheck, Clock, XCircle, Eye, UserCheck, Wallet } from "lucide-react";
+import { Search, Plus, Edit2, Trash2, X, Users, CalendarCheck, Clock, XCircle, Eye, UserCheck, Wallet, Calendar, ChevronRight } from "lucide-react";
 import { type Lead } from "../types";
 import Modal from "../components/UI/Modal";
 import LeadForm from "../components/UI/LeadForm";
@@ -255,7 +255,7 @@ const LeadsPage: React.FC = () => {
   return (
     <>
       <div className="min-h-screen bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-2 pb-4 sm:py-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-2 pb-28 sm:pb-8 sm:pt-8">
           <p className="hidden sm:block text-gray-600 mb-6">รายชื่อลูกค้าที่ลงข้อมูลและการติดตาม</p>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-6 mb-4 sm:mb-8">
@@ -296,10 +296,10 @@ const LeadsPage: React.FC = () => {
 
           <div className="bg-white rounded-lg shadow">
             <div className="shadow">
-              <div className="flex gap-4 px-6 overflow-x-auto">
+              <div className="flex gap-0 sm:gap-4 px-2 sm:px-6 overflow-x-auto">
                 <button
                   onClick={() => setActiveTab("notScheduled")}
-                  className={`py-4 px-4 sm:px-6 font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "notScheduled"
+                  className={`py-3 sm:py-4 px-3 sm:px-6 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "notScheduled"
                     ? "border-indigo-600 text-indigo-600"
                     : "border-transparent text-gray-500 hover:text-gray-700"
                     }`}
@@ -308,7 +308,7 @@ const LeadsPage: React.FC = () => {
                 </button>
                 <button
                   onClick={() => setActiveTab("scheduled")}
-                  className={`py-4 px-4 sm:px-6 font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "scheduled"
+                  className={`py-3 sm:py-4 px-3 sm:px-6 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "scheduled"
                     ? "border-indigo-600 text-indigo-600"
                     : "border-transparent text-gray-500 hover:text-gray-700"
                     }`}
@@ -317,7 +317,7 @@ const LeadsPage: React.FC = () => {
                 </button>
                 <button
                   onClick={() => setActiveTab("arrived")}
-                  className={`py-4 px-4 sm:px-6 font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "arrived"
+                  className={`py-3 sm:py-4 px-3 sm:px-6 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "arrived"
                     ? "border-indigo-600 text-indigo-600"
                     : "border-transparent text-gray-500 hover:text-gray-700"
                     }`}
@@ -327,11 +327,11 @@ const LeadsPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="p-6 shadow flex gap-4 max-md:flex-col">
+            <div className="p-4 sm:p-6 shadow flex gap-3 sm:gap-4 flex-col sm:flex-row">
               <select
                 value={selectedYear}
                 onChange={(e) => setSelectedYear(e.target.value)}
-                className="px-4 py-2 shadow rounded-md bg-white min-w-[120px]"
+                className="px-3 sm:px-4 py-2 shadow rounded-md bg-white min-w-[100px] sm:min-w-[120px] text-sm"
               >
                 {(() => {
                   const START_YEAR = 2024;
@@ -349,26 +349,26 @@ const LeadsPage: React.FC = () => {
                 })()}
               </select>
 
-              <div className="flex items-center w-full shadow rounded-md px-3">
-                <Search className="w-5 h-5 text-gray-400 mr-2" />
+              <div className="flex items-center flex-1 shadow rounded-md px-3">
+                <Search className="w-5 h-5 text-gray-400 mr-2 shrink-0" />
                 <input
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="ค้นหา Lead..."
-                  className="w-full py-2 outline-none"
+                  className="w-full py-2 outline-none text-sm"
                 />
               </div>
 
               <button
                 onClick={() => { setEditingLead(null); setIsModalOpen(true); }}
-                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-md whitespace-nowrap"
+                className="flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 bg-indigo-600 text-white rounded-md whitespace-nowrap text-sm font-medium"
               >
                 <Plus className="w-5 h-5" />
                 เพิ่ม Lead
               </button>
             </div>
 
-            <div className="overflow-x-auto">
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 text-gray-500 uppercase tracking-wider">
                   <tr>
@@ -376,10 +376,7 @@ const LeadsPage: React.FC = () => {
                     <th className="px-6 py-4 text-left font-semibold">โทร</th>
 
                     {activeTab === "notScheduled" && (
-                      <>
-                        <th className="px-6 py-4 text-left font-semibold">วันที่สร้าง</th>
-                        <th className="px-6 py-4 text-left font-semibold">ช่องทางที่รู้จักคลินิก</th>
-                      </>
+                      <th className="px-6 py-4 text-left font-semibold">วันที่สร้าง</th>
                     )}
 
                     {activeTab === "scheduled" && (
@@ -431,15 +428,9 @@ const LeadsPage: React.FC = () => {
                         </td>
 
                         {activeTab === "notScheduled" && (
-                          <>
-                            <td className="px-6 py-4 text-gray-500">
-                              {lead.createdAtDisplay}
-                            </td>
-
-                            <td className="px-6 py-4 text-gray-500">
-                              {lead.referralChannel}
-                            </td>
-                          </>
+                          <td className="px-6 py-4 text-gray-500">
+                            {lead.createdAtDisplay}
+                          </td>
                         )}
 
                         {activeTab === "scheduled" && (
@@ -554,7 +545,148 @@ const LeadsPage: React.FC = () => {
                   )}
                 </tbody>
               </table>
+            </div>
 
+            <div className="md:hidden">
+              {filteredLeads.length === 0 ? (
+                <div className="flex flex-col items-center justify-center text-gray-400 py-16">
+                  <Users className="w-12 h-12 mb-4 opacity-50" />
+                  <p className="text-lg font-medium text-gray-500">ยังไม่มีข้อมูล</p>
+                  <p className="text-sm mt-1">กดปุ่ม "เพิ่ม Lead" เพื่อเริ่มต้น</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-100">
+                  {filteredLeads.map((lead) => (
+                    <div key={lead.id} className="p-4 hover:bg-gray-50 transition-colors">
+                      <div className="flex items-start justify-between mb-1">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-gray-900 truncate">{lead.name}</h3>
+                          <p className="text-sm text-gray-500">{lead.phone}</p>
+                        </div>
+
+                        {activeTab === "scheduled" && (
+                          <button
+                            onClick={() => openStatusModal(lead)}
+                            disabled={isLeadLocked(lead)}
+                            className={`flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-full transition-all ml-2 shrink-0
+                              ${lead.status === "scheduled"
+                                ? "bg-blue-100 text-blue-700"
+                                : lead.status === "rescheduled"
+                                  ? "bg-yellow-100 text-yellow-700"
+                                  : lead.status === "cancelled"
+                                    ? "bg-red-100 text-red-700"
+                                    : "bg-gray-100 text-gray-700"
+                              }
+                              ${isLeadLocked(lead) ? "opacity-50" : "active:scale-95"}
+                            `}
+                          >
+                            {statusLabel[lead.status]}
+                            {!isLeadLocked(lead) && (
+                              <ChevronRight className="w-3 h-3" />
+                            )}
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500 mb-3">
+                        {activeTab === "notScheduled" && (
+                          <span className="flex items-center gap-1">
+                            <Calendar className="w-3.5 h-3.5" />
+                            สร้าง: {lead.createdAtDisplay}
+                          </span>
+                        )}
+
+                        {activeTab === "scheduled" && (
+                          <>
+                            <span className="flex items-center gap-1">
+                              <CalendarCheck className="w-3.5 h-3.5" />
+                              นัด: {lead.appointmentDateDisplay || "-"}
+                            </span>
+                            {lead.appointmentDate && ["scheduled", "rescheduled"].includes(lead.status) && (
+                              <span className="flex items-center gap-1">
+                                <Clock className="w-3.5 h-3.5" />
+                                {(() => {
+                                  const days = getDaysUntilAppointment(lead.appointmentDate);
+                                  if (days === 0) return <span className="text-green-600 font-medium">ถึงวันนัดแล้ว</span>;
+                                  if (days > 0) return <span className="text-green-600 font-medium">อีก {days} วัน</span>;
+                                  return <span className="text-red-600 font-medium">เลยมา {Math.abs(days)} วัน</span>;
+                                })()}
+                              </span>
+                            )}
+                          </>
+                        )}
+
+                        {activeTab === "arrived" && (
+                          <>
+                            <span className="flex items-center gap-1">
+                              <CalendarCheck className="w-3.5 h-3.5" />
+                              มา: {lead.appointmentDateDisplay || "-"}
+                            </span>
+                            {lead.payments?.amount && (
+                              <span className="flex items-center gap-1 text-green-600 font-medium">
+                                <Wallet className="w-3.5 h-3.5" />
+                                {lead.payments.amount.toLocaleString()} บาท
+                              </span>
+                            )}
+                          </>
+                        )}
+                      </div>
+
+                      {activeTab === "arrived" && lead.interest && lead.interest.length > 0 && (
+                        <div className="text-xs text-gray-600 mb-3">
+                          <span className="text-gray-400">หัตถการ:</span>{" "}
+                          {lead.interest.map((i: any) => i.name || i).join(", ")}
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
+                        <button
+                          onClick={() => setViewingLead(lead)}
+                          className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-blue-600 bg-blue-50 rounded-lg active:bg-blue-100 transition-colors"
+                        >
+                          <Eye className="w-4 h-4" />
+                          ดูข้อมูล
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (!isLeadLocked(lead)) {
+                              setEditingLead(lead);
+                              setIsModalOpen(true);
+                            }
+                          }}
+                          disabled={isLeadLocked(lead)}
+                          className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium rounded-lg transition-colors
+                            ${isLeadLocked(lead)
+                              ? "text-gray-300 bg-gray-50"
+                              : "text-indigo-600 bg-indigo-50 active:bg-indigo-100"
+                            }
+                          `}
+                        >
+                          <Edit2 className="w-4 h-4" />
+                          แก้ไข
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (!isLeadLocked(lead)) {
+                              openDeleteModal(lead);
+                            }
+                          }}
+                          disabled={isLeadLocked(lead)}
+                          className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium rounded-lg transition-colors
+                            ${isLeadLocked(lead)
+                              ? "text-gray-300 bg-gray-50"
+                              : "text-red-600 bg-red-50 active:bg-red-100"
+                            }
+                          `}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          ลบ
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -591,8 +723,8 @@ const LeadsPage: React.FC = () => {
       </Modal>
 
       {isDeleteModalOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl w-[90%] max-w-sm p-6">
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50">
+          <div className="bg-white w-full sm:max-w-sm sm:mx-4 p-6 rounded-t-2xl sm:rounded-2xl">
             <h3 className="font-semibold text-lg mb-4">ยืนยันการลบ</h3>
             <p className="text-sm text-gray-600 mb-6">
               ต้องการลบ <b>{leadToDelete?.name}</b> ใช่หรือไม่?
@@ -627,16 +759,16 @@ type SummaryBoxProps = {
 
 const SummaryBox = ({ label, value, color = "text-gray-800", icon }: SummaryBoxProps) => {
   return (
-    <div className="bg-white rounded-xl shadow p-6 flex items-center justify-between">
-      <div className="flex items-center gap-4">
+    <div className="bg-white rounded-xl shadow p-3 sm:p-6 flex items-center justify-between">
+      <div className="flex items-center gap-2 sm:gap-4">
         {icon && (
-          <div className="text-3xl text-gray-400">
+          <div className="text-2xl sm:text-3xl text-gray-400">
             {icon}
           </div>
         )}
-        <p className="text-sm text-gray-500">{label}</p>
+        <p className="text-xs sm:text-sm text-gray-500">{label}</p>
       </div>
-      <p className={`text-2xl font-bold ${color}`}>
+      <p className={`text-xl sm:text-2xl font-bold ${color}`}>
         {value}
       </p>
     </div>
@@ -671,6 +803,7 @@ const StatusModal = ({
   const [nextAppointmentEnabled, setNextAppointmentEnabled] = useState(false);
   const [nextAppointmentDate, setNextAppointmentDate] = useState("");
   const [nextAppointmentTime, setNextAppointmentTime] = useState("");
+  const [validationError, setValidationError] = useState("");
 
 
   const totalAmount = procedures.reduce(
@@ -723,13 +856,27 @@ const StatusModal = ({
         i === index ? { ...item, [key]: value } : item
       )
     );
+    setValidationError("");
   };
 
   const handleSave = async () => {
     try {
       if (!selectedStatus) return;
 
+      setValidationError("");
+
       const validProcedures = procedures.filter(p => p.name && p.price);
+
+      if (selectedStatus === "arrived") {
+        if (validProcedures.length === 0 || !validProcedures.some(p => p.name.trim())) {
+          setValidationError("กรุณากรอกข้อมูลหัตถการอย่างน้อย 1 รายการ");
+          return;
+        }
+        if (!paymentMethod) {
+          setValidationError("กรุณาเลือกช่องทางการชำระเงิน");
+          return;
+        }
+      }
 
       const totalAmount = validProcedures.reduce(
         (sum, p) => sum + (parseFloat(p.price) || 0),
@@ -875,9 +1022,9 @@ const StatusModal = ({
 
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden">
-        <div className="flex justify-between items-center px-6 py-3 bg-[#1479FF] shrink-0">
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center z-50">
+      <div className="bg-white w-full sm:max-w-2xl sm:w-full sm:mx-4 max-h-[85dvh] sm:max-h-[85vh] flex flex-col shadow-xl overflow-hidden rounded-t-2xl sm:rounded-2xl">
+        <div className="flex justify-between items-center px-4 sm:px-6 py-3 bg-[#1479FF] shrink-0">
           <h2 className="text-base font-semibold text-white">อัปเดตสถานะ</h2>
           <button
             onClick={onClose}
@@ -887,7 +1034,7 @@ const StatusModal = ({
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div className="flex-1 overflow-y-auto p-4 pb-6 sm:p-6 space-y-6 overscroll-contain">
           <div>
             <label className="block text-sm font-medium mb-3">
               เลือกสถานะ
@@ -900,7 +1047,10 @@ const StatusModal = ({
                   <button
                     key={btn.value}
                     type="button"
-                    onClick={() => setSelectedStatus(btn.value)}
+                    onClick={() => {
+                      setSelectedStatus(btn.value);
+                      setValidationError("");
+                    }}
                     className={`py-3 text-sm font-medium transition
                       ${isActive
                         ? btn.activeClass
@@ -1084,7 +1234,10 @@ const StatusModal = ({
                 </label>
                 <select
                   value={paymentMethod}
-                  onChange={(e) => setPaymentMethod(e.target.value)}
+                  onChange={(e) => {
+                    setPaymentMethod(e.target.value);
+                    setValidationError("");
+                  }}
                   className="w-full px-4 py-2.5 border rounded-lg"
                 >
                   <option value="">-- เลือกช่องทาง --</option>
@@ -1223,30 +1376,30 @@ const StatusModal = ({
 
                 {nextAppointmentEnabled && (
                   <div className="space-y-4 pt-3 border-t border-gray-100">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
+                    <div className="flex gap-3">
+                      <div className="flex-1 min-w-0">
                         <label className="block text-sm font-medium text-gray-700 mb-1">วันที่นัด</label>
                         <input
                           type="date"
                           value={nextAppointmentDate}
                           onChange={(e) => setNextAppointmentDate(e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-indigo-500 focus:border-indigo-500"
                         />
                       </div>
-                      <div>
+                      <div className="flex-1 min-w-0">
                         <label className="block text-sm font-medium text-gray-700 mb-1">เวลานัด</label>
                         <input
                           type="time"
                           value={nextAppointmentTime}
                           onChange={(e) => setNextAppointmentTime(e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-indigo-500 focus:border-indigo-500"
                         />
                       </div>
                     </div>
                     <p className="text-xs text-gray-500">
                       {nextAppointmentDate
-                        ? `จะสร้างข้อมูลใหม่สถานะ "ทำนัด" โดยจะสร้างเป็นวันที่ 1 ของเดือน ${new Date(nextAppointmentDate).toLocaleDateString('th-TH', { month: 'long', year: 'numeric' })}`
-                        : 'ถ้ายังไม่ระบุวันนัด ไม่ต้องใส่วันที่และเวลา โดยจะเป็นสถานะ "รอตัดสินใจ"'
+                        ? `จะสร้างข้อมูลสถานะ "ทำนัด" ในเดือน ${new Date(nextAppointmentDate).toLocaleDateString('th-TH', { month: 'long', year: 'numeric' })}`
+                        : 'ไม่ระบุวันนัดหมาย จะสร้างข้อมูลในสถานะ "รอตัดสินใจ" ของเดือนนี้'
                       }
                     </p>
                   </div>
@@ -1257,36 +1410,51 @@ const StatusModal = ({
           )}
 
           {selectedStatus === "rescheduled" && (
-            <div className="space-y-4 border-t pt-6">
-              <h3 className="font-semibold text-gray-700">
-                กำหนดนัดใหม่
-              </h3>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium mb-2">
-                    วันที่นัด
+            <div className="space-y-5 mt-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="new-date"
+                    className="block text-sm font-medium text-gray-700"
+                  >
+                    วันที่นัดใหม่
                   </label>
                   <input
+                    id="new-date"
                     type="date"
-                    value={newAppointmentDate}
-                    onChange={(e) =>
-                      setNewAppointmentDate(e.target.value)
-                    }
-                    className="w-full px-3 py-2 border rounded-md"
+                    value={newAppointmentDate || ''}
+                    onChange={(e) => setNewAppointmentDate(e.target.value)}
+                    className={`
+                      block w-full px-4 py-3.5
+                      border border-gray-300 rounded-lg
+                      text-base
+                      focus:ring-2 focus:ring-[#1479FF] focus:border-[#1479FF] focus:outline-none
+                      min-h-[52px]
+                      appearance-none
+                    `}
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2">
-                    เวลานัด
+
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="new-time"
+                    className="block text-sm font-medium text-gray-700"
+                  >
+                    เวลานัดใหม่
                   </label>
                   <input
+                    id="new-time"
                     type="time"
-                    value={newAppointmentTime}
-                    onChange={(e) =>
-                      setNewAppointmentTime(e.target.value)
-                    }
-                    className="w-full px-3 py-2 border rounded-md"
+                    value={newAppointmentTime || ''}
+                    onChange={(e) => setNewAppointmentTime(e.target.value)}
+                    className={`
+                      block w-full px-4 py-3.5
+                      border border-gray-300 rounded-lg
+                      text-base
+                      focus:ring-2 focus:ring-[#1479FF] focus:border-[#1479FF] focus:outline-none
+                      min-h-[52px]
+                      appearance-none
+                    `}
                   />
                 </div>
               </div>
@@ -1294,20 +1462,25 @@ const StatusModal = ({
           )}
         </div>
 
-        <div className="flex justify-end gap-3 px-6 py-3 bg-gray-50 shrink-0">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors"
-          >
-            ยกเลิก
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={!selectedStatus}
-            className="px-5 py-2 bg-[#1479FF] text-white rounded-lg text-sm font-medium hover:bg-[#0066E6] disabled:bg-gray-300 transition-colors"
-          >
-            บันทึก
-          </button>
+        <div className="px-6 py-3 bg-gray-50 shrink-0">
+          {validationError && (
+            <p className="text-sm text-red-500 mb-3">* {validationError}</p>
+          )}
+          <div className="flex justify-end gap-3">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors"
+            >
+              ยกเลิก
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={!selectedStatus}
+              className="px-5 py-2 bg-[#1479FF] text-white rounded-lg text-sm font-medium hover:bg-[#0066E6] disabled:bg-gray-300 transition-colors"
+            >
+              บันทึก
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -1346,8 +1519,8 @@ const ViewLeadModal = ({
   const status = statusConfig[lead.status] || statusConfig.pending;
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-2 sm:p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[95vh] sm:max-h-[90vh] flex flex-col overflow-hidden">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center z-50">
+      <div className="bg-white w-full sm:max-w-2xl sm:w-full sm:mx-4 max-h-[85dvh] sm:max-h-[85vh] flex flex-col shadow-2xl overflow-hidden rounded-t-2xl sm:rounded-2xl">
 
         <div className="flex items-center justify-between px-4 sm:px-6 py-3 bg-[#1479FF]">
           <h2 className="text-base font-semibold text-white">รายละเอียด</h2>
@@ -1359,15 +1532,14 @@ const ViewLeadModal = ({
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
-
+        <div className="flex-1 overflow-y-auto p-4 pb-8 sm:p-6 space-y-4 sm:space-y-6 overscroll-contain">
           <div className="flex items-center gap-3 flex-wrap">
             <span className={`inline-flex items-center px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-full ${status.bg} ${status.text}`}>
               {status.label}
             </span>
             {lead.status !== "pending" && lead.appointmentDateDisplay && !lead.appointmentDateDisplay.includes("1970") && (
               <span className="text-xs sm:text-sm text-gray-500">
-                📅 {lead.appointmentDateDisplay}
+                วันนัด: {lead.appointmentDateDisplay}
               </span>
             )}
           </div>

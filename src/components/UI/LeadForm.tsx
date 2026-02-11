@@ -126,21 +126,21 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
 
   const validateStep1 = (): Record<string, string> => {
     const newErrors: Record<string, string> = {};
-    
+
     if (!formData.name.trim()) newErrors.name = "กรุณากรอกชื่อนามสกุล";
     if (!formData.phone.trim()) newErrors.phone = "กรุณากรอกเบอร์ติดต่อ";
     if (!formData.interest.name) newErrors.interest = "กรุณาเลือกความสนใจ";
     if (!formData.referralChannel) newErrors.referralChannel = "กรุณาเลือกช่องทางที่รู้จักคลินิก";
     if (!formData.admin) newErrors.admin = "กรุณาเลือกแอดมิน";
     if (!formData.branch || formData.branch === "0") newErrors.branch = "กรุณาเลือกสาขา";
-    
+
     return newErrors;
   };
 
   const handleNextStep = () => {
     const newErrors = validateStep1();
     setErrors(newErrors);
-    
+
     if (Object.keys(newErrors).length === 0) {
       setStep(2);
     }
@@ -265,7 +265,7 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
   };
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-4 sm:space-y-6 pb-4">
       <div className="flex justify-between items-center mb-6 sm:mb-8 relative px-4 sm:px-0">
         {steps.map((s, i) => (
           <div key={i} className="flex-1 flex flex-col items-center relative">
@@ -397,8 +397,8 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
           </div>
 
           <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-5 mt-6 border-t border-gray-100">
-            <button 
-              onClick={onClose} 
+            <button
+              onClick={onClose}
               className="w-full sm:w-auto px-4 py-2.5 sm:py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors"
             >
               ยกเลิก
@@ -436,24 +436,53 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
           </div>
 
           {formData.status === 'ทำนัด' && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">วันที่นัด</label>
-                <input
-                  type="date"
-                  value={formData.appointmentDate}
-                  onChange={(e) => setFormData({ ...formData, appointmentDate: e.target.value })}
-                  className="w-full px-3 py-2.5 sm:py-2 border border-gray-300 rounded-lg sm:rounded-md text-base sm:text-sm focus:ring-[#1479FF] focus:border-[#1479FF]"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">เวลานัด</label>
-                <input
-                  type="time"
-                  value={formData.appointmentTime}
-                  onChange={(e) => setFormData({ ...formData, appointmentTime: e.target.value })}
-                  className="w-full px-3 py-2.5 sm:py-2 border border-gray-300 rounded-lg sm:rounded-md text-base sm:text-sm focus:ring-[#1479FF] focus:border-[#1479FF]"
-                />
+            <div className="space-y-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="appt-date"
+                    className="block text-sm font-medium text-gray-700"
+                  >
+                    วันที่นัด
+                  </label>
+                  <input
+                    id="appt-date"
+                    type="date"
+                    value={formData.appointmentDate}
+                    onChange={(e) => setFormData(prev => ({ ...prev, appointmentDate: e.target.value }))}
+                    className={`
+                      block w-full px-4 py-3.5
+                      border border-gray-300 rounded-lg
+                      text-base leading-tight
+                      focus:ring-2 focus:ring-[#1479FF] focus:border-[#1479FF] focus:outline-none
+                      min-h-[52px]
+                      appearance-none
+                    `}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="appt-time"
+                    className="block text-sm font-medium text-gray-700"
+                  >
+                    เวลานัด
+                  </label>
+                  <input
+                    id="appt-time"
+                    type="time"
+                    value={formData.appointmentTime}
+                    onChange={(e) => setFormData(prev => ({ ...prev, appointmentTime: e.target.value }))}
+                    className={`
+                      block w-full px-4 py-3.5
+                      border border-gray-300 rounded-lg
+                      text-base leading-tight
+                      focus:ring-2 focus:ring-[#1479FF] focus:border-[#1479FF] focus:outline-none
+                      min-h-[52px]
+                      appearance-none
+                    `}
+                  />
+                </div>
               </div>
             </div>
           )}
@@ -603,15 +632,15 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
           </div>
 
           <div className="flex flex-col sm:flex-row justify-between gap-3 pt-5 mt-6 border-t border-gray-100">
-            <button 
-              onClick={() => setStep(1)} 
+            <button
+              onClick={() => setStep(1)}
               className="order-3 sm:order-1 w-full sm:w-auto px-4 py-2.5 sm:py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors"
             >
               ย้อนกลับ
             </button>
             <div className="flex flex-col sm:flex-row gap-3 order-1 sm:order-2">
-              <button 
-                onClick={onClose} 
+              <button
+                onClick={onClose}
                 className="order-2 sm:order-1 w-full sm:w-auto px-4 py-2.5 sm:py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors"
               >
                 ยกเลิก

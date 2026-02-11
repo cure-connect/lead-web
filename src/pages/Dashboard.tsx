@@ -187,7 +187,7 @@ const DashboardPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-2 pb-4 sm:py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-2 pb-28 sm:pb-8 sm:pt-8">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-gray-800">Dashboard</h1>
@@ -301,9 +301,9 @@ const DashboardPage: React.FC = () => {
               </h2>
             </div>
 
-            <div className="p-6 space-y-4">
-              <div className="bg-linear-to-br from-emerald-50 to-green-50 rounded-xl p-4 border border-emerald-100">
-                <div className="flex items-center justify-between">
+            <div className="p-4 sm:p-6 space-y-3 sm:space-y-4">
+              <div className="bg-linear-to-br from-emerald-50 to-green-50 rounded-xl p-3 sm:p-4 border border-emerald-100">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                   <div className="flex items-center gap-3">
                     <div className="p-2 bg-emerald-100 rounded-lg">
                       <Banknote className="w-5 h-5 text-emerald-600" />
@@ -313,22 +313,22 @@ const DashboardPage: React.FC = () => {
                       <p className="text-xs text-gray-400">จาก {finance.transactionCount} รายการ</p>
                     </div>
                   </div>
-                  <p className="text-xl font-bold text-emerald-700">
+                  <p className="text-xl font-bold text-emerald-700 text-right">
                     {finance.totalRevenue.toLocaleString()} <span className="text-sm font-normal">บาท</span>
                   </p>
                 </div>
               </div>
 
               {finance.totalServiceCharge > 0 && (
-                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-                  <div className="flex items-center justify-between">
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 sm:p-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                     <div className="flex items-center gap-3">
                       <div className="p-2 bg-amber-100 rounded-lg">
                         <CreditCard className="w-5 h-5 text-amber-600" />
                       </div>
                       <span className="text-sm text-gray-600">ค่าธรรมเนียม (บัตรเครดิต)</span>
                     </div>
-                    <p className="text-xl font-bold text-red-600">
+                    <p className="text-xl font-bold text-red-600 text-right">
                       -{finance.totalServiceCharge.toLocaleString()} <span className="text-sm font-normal">บาท</span>
                     </p>
                   </div>
@@ -336,37 +336,37 @@ const DashboardPage: React.FC = () => {
               )}
 
               {finance.totalCommission > 0 && (
-                <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
-                  <div className="flex items-center justify-between">
+                <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 sm:p-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                     <div className="flex items-center gap-3">
                       <div className="p-2 bg-purple-100 rounded-lg">
                         <BadgePercent className="w-5 h-5 text-purple-600" />
                       </div>
                       <span className="text-sm text-gray-600">ค่าคอมมิชชันทั้งหมด</span>
                     </div>
-                    <p className="text-xl font-bold text-purple-700">
+                    <p className="text-xl font-bold text-purple-700 text-right">
                       {finance.totalCommission.toLocaleString()} <span className="text-sm font-normal">บาท</span>
                     </p>
                   </div>
                 </div>
               )}
 
-              <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
-                <div className="flex items-center justify-between">
+              <div className="bg-green-50 border border-green-200 rounded-xl p-3 sm:p-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                   <div className="flex items-center gap-3">
-                    <div className="p-2 bg-gray-100 rounded-lg">
-                      <Wallet className="w-5 h-5 text-gray-600" />
+                    <div className="p-2 bg-green-100 rounded-lg">
+                      <Wallet className="w-5 h-5 text-green-600" />
                     </div>
                     <div>
                       <span className="text-sm text-gray-600">รายรับสุทธิ</span>
                       {(finance.totalServiceCharge > 0 || finance.totalCommission > 0) && (
                         <p className="text-xs text-gray-400">
-                          หลังหัก{finance.totalServiceCharge > 0 ? ' ค่าธรรมเนียม' : ''}{finance.totalServiceCharge > 0 && finance.totalCommission > 0 ? ',' : ''}{finance.totalCommission > 0 ? ' ค่าคอมมิชชัน' : ''}
+                          หลังหัก{finance.totalServiceCharge > 0 ? ' ค่าธรรมเนียม' : ''}{finance.totalServiceCharge > 0 && finance.totalCommission > 0 ? ',' : ''}{finance.totalCommission > 0 ? ' คอมมิชชัน' : ''}
                         </p>
                       )}
                     </div>
                   </div>
-                  <p className="text-xl font-bold text-gray-600">
+                  <p className="text-xl font-bold text-green-600 text-right">
                     {finance.finalNetRevenue.toLocaleString()} <span className="text-sm font-normal">บาท</span>
                   </p>
                 </div>

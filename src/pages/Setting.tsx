@@ -31,7 +31,7 @@ export default function SettingsPage() {
     channels: { title: "ช่องทางที่รู้จัก", type: "channel", icon: <Radio className="w-5 h-5 text-purple-600" />, iconBg: "bg-purple-100", items: [] }
   });
 
-  const [inputs, setInputs] = useState<Record<string, { name: string; }>>({});
+  const [inputs, setInputs] = useState<Record<string, { name: string }>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [editOpen, setEditOpen] = useState(false);
   const [editOpen_error, setEditOpenError] = useState("");
@@ -99,6 +99,7 @@ export default function SettingsPage() {
       setErrors(prev => ({ ...prev, [sectionKey]: "" }));
     } catch (err: any) {
       console.error("Failed to create", sectionKey, err);
+      // Backend: 409 duplicate
       if (err.response?.status === 409) {
         setErrors(prev => ({ ...prev, [sectionKey]: err.response.data.message }));
       } else {
@@ -185,7 +186,7 @@ export default function SettingsPage() {
 
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 sm:p-8">
+    <div className="min-h-screen bg-gray-50 p-4 pb-28 sm:p-8">
       <div className="max-w-6xl mx-auto">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
           {Object.entries(sections).map(([key, section]) => (
@@ -199,45 +200,24 @@ export default function SettingsPage() {
               </div>
 
               <div className="flex flex-col sm:flex-row gap-2 mb-1">
-                {key === "interests" ? (
-                  <>
-                    <input
-                      value={inputs[key]?.name || ""}
-                      onChange={e => {
-                        setInputs(prev => ({ ...prev, [key]: { ...prev[key], name: e.target.value } }));
-                        if (errors[key]) setErrors(prev => ({ ...prev, [key]: "" }));
-                      }}
-                      placeholder="ชื่อหัตถการ"
-                      className={`flex-1 px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none ${errors[key] ? "border-red-400" : "border-gray-200"}`}
-                    />
-                    <button
-                      onClick={() => createItem(key)}
-                      disabled={!inputs[key]?.name?.trim()}
-                      className="px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex justify-center items-center disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      <Plus className="w-5 h-5 sm:w-4 sm:h-4" />
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <input
-                      value={inputs[key]?.name || ""}
-                      onChange={e => {
-                        setInputs(prev => ({ ...prev, [key]: { name: e.target.value } }));
-                        if (errors[key]) setErrors(prev => ({ ...prev, [key]: "" }));
-                      }}
-                      placeholder={`เพิ่ม${section.title}`}
-                      className={`flex-1 px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none ${errors[key] ? "border-red-400" : "border-gray-200"}`}
-                    />
-                    <button
-                      onClick={() => createItem(key)}
-                      disabled={!inputs[key]?.name?.trim()}
-                      className="px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex justify-center items-center disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      <Plus className="w-5 h-5 sm:w-4 sm:h-4" />
-                    </button>
-                  </>
-                )}
+                <>
+                  <input
+                    value={inputs[key]?.name || ""}
+                    onChange={e => {
+                      setInputs(prev => ({ ...prev, [key]: { name: e.target.value } }));
+                      if (errors[key]) setErrors(prev => ({ ...prev, [key]: "" }));
+                    }}
+                    placeholder={`เพิ่ม${section.title}`}
+                    className={`flex-1 px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none ${errors[key] ? "border-red-400" : "border-gray-200"}`}
+                  />
+                  <button
+                    onClick={() => createItem(key)}
+                    disabled={!inputs[key]?.name?.trim()}
+                    className="px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex justify-center items-center disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <Plus className="w-5 h-5 sm:w-4 sm:h-4" />
+                  </button>
+                </>
               </div>
 
               {errors[key] && (
