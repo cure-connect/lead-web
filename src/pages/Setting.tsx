@@ -13,7 +13,6 @@ import api from "@/api/api";
 interface Item {
   _id: string;
   name: string;
-  price?: number;
 }
 
 interface SectionData {
@@ -32,7 +31,7 @@ export default function SettingsPage() {
     channels: { title: "ช่องทางที่รู้จัก", type: "channel", icon: <Radio className="w-5 h-5 text-purple-600" />, iconBg: "bg-purple-100", items: [] }
   });
 
-  const [inputs, setInputs] = useState<Record<string, { name: string; price?: string }>>({});
+  const [inputs, setInputs] = useState<Record<string, { name: string; }>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [editOpen, setEditOpen] = useState(false);
   const [editOpen_error, setEditOpenError] = useState("");
@@ -41,7 +40,6 @@ export default function SettingsPage() {
   const [currentSection, setCurrentSection] = useState<string | null>(null);
   const [currentItem, setCurrentItem] = useState<Item | null>(null);
   const [editValue, setEditValue] = useState("");
-  const [editPrice, setEditPrice] = useState<string>("");
 
   useEffect(() => {
     const fetchData = async () => {
@@ -68,7 +66,6 @@ export default function SettingsPage() {
     const section = sections[sectionKey];
 
     if (!inputData?.name?.trim()) return;
-    if (sectionKey === "interests" && !inputData.price?.trim()) return;
 
     const trimmedName = inputData.name.trim().toLowerCase();
     const isDuplicate = section.items.some(
@@ -84,10 +81,6 @@ export default function SettingsPage() {
       name: inputData.name.trim(),
     };
 
-    if (sectionKey === "interests") {
-      payload.price = parseFloat(inputData.price!);
-    }
-
     try {
       const res = await api.post("/setting/createsetting", payload);
 
@@ -101,12 +94,11 @@ export default function SettingsPage() {
 
       setInputs(prev => ({
         ...prev,
-        [sectionKey]: { name: "", price: "" },
+        [sectionKey]: { name: "" },
       }));
       setErrors(prev => ({ ...prev, [sectionKey]: "" }));
     } catch (err: any) {
       console.error("Failed to create", sectionKey, err);
-      // Backend: 409 duplicate
       if (err.response?.status === 409) {
         setErrors(prev => ({ ...prev, [sectionKey]: err.response.data.message }));
       } else {
@@ -120,7 +112,6 @@ export default function SettingsPage() {
     setCurrentSection(sectionKey);
     setCurrentItem(item);
     setEditValue(item.name);
-    setEditPrice(item.price?.toString() || "");
     setEditOpen(true);
   };
 
@@ -132,10 +123,6 @@ export default function SettingsPage() {
       type: section.type,
       name: editValue.trim(),
     };
-
-    if (currentSection === "interests") {
-      payload.price = parseFloat(editPrice);
-    }
 
     try {
       await api.patch(`/setting/editsetting/${currentItem._id}`, payload);
@@ -149,10 +136,6 @@ export default function SettingsPage() {
               ? {
                 ...i,
                 name: editValue,
-                price:
-                  currentSection === "interests"
-                    ? parseFloat(editPrice)
-                    : i.price,
               }
               : i
           ),
@@ -204,8 +187,6 @@ export default function SettingsPage() {
   return (
     <div className="min-h-screen bg-gray-50 p-4 sm:p-8">
       <div className="max-w-6xl mx-auto">
-        <h1 className="text-xl sm:text-2xl font-semibold mb-6">ตั้งค่าระบบ</h1>
-
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
           {Object.entries(sections).map(([key, section]) => (
             <div key={key} className="bg-white shadow rounded-xl p-4 sm:p-6">
@@ -229,18 +210,9 @@ export default function SettingsPage() {
                       placeholder="ชื่อหัตถการ"
                       className={`flex-1 px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none ${errors[key] ? "border-red-400" : "border-gray-200"}`}
                     />
-                    <input
-                      value={inputs[key]?.price || ""}
-                      onChange={e => setInputs(prev => ({ ...prev, [key]: { ...prev[key], price: e.target.value } }))}
-                      placeholder="ราคา"
-                      type="text"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      className="w-24 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                    />
                     <button
                       onClick={() => createItem(key)}
-                      disabled={!inputs[key]?.name?.trim() || !inputs[key]?.price?.trim()}
+                      disabled={!inputs[key]?.name?.trim()}
                       className="px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex justify-center items-center disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <Plus className="w-5 h-5 sm:w-4 sm:h-4" />
@@ -276,7 +248,7 @@ export default function SettingsPage() {
                 {section.items.map(item => (
                   <div key={item._id} className="flex justify-between items-center px-3 py-3 bg-gray-50 rounded-lg text-sm hover:bg-gray-100">
                     <span>
-                      {item.name}{key === "interests" && item.price != null ? ` - ${item.price.toLocaleString()} บาท` : ""}
+                      {item.name}
                     </span>
                     <div className="flex gap-3">
                       <button onClick={() => openEditModal(key, item)} className="text-gray-400 hover:text-indigo-600">
@@ -302,17 +274,6 @@ export default function SettingsPage() {
             className={`w-full px-3 py-2 mb-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none ${editOpen_error ? "border-red-400" : ""}`}
             placeholder="ชื่อ"
           />
-          {currentSection === "interests" && (
-            <input
-              value={editPrice}
-              onChange={e => setEditPrice(e.target.value)}
-              placeholder="ราคา"
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-            />
-          )}
           {editOpen_error && (
             <p className="text-xs text-red-500 mt-2">* {editOpen_error}</p>
           )}

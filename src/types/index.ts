@@ -2,7 +2,6 @@ export type LeadStatus = "pending" | "scheduled" | "rescheduled" | "cancelled" |
 
 export interface LeadInterest {
   name: string;
-  price: string;
   procedureId?: number | string;
 }
 
@@ -40,10 +39,9 @@ export interface Lead {
 
   interest?: Array<{
     name: string;
-    price: number | string;
     procedureId?: string;
   }>;
-  price: string;
+  
   referralChannel: string;
   admin: string;
   branch: string;

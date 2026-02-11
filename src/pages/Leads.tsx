@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useEffect, type ReactNode } from "react";
-import { Search, Plus, Edit2, Trash2, X, Users, CalendarCheck, Clock, XCircle, Eye } from "lucide-react";
+import React, { useState, useMemo, useEffect } from "react";
+import { Search, Plus, Edit2, Trash2, X, Users, CalendarCheck, Clock, XCircle, Eye, UserCheck, Wallet } from "lucide-react";
 import { type Lead } from "../types";
 import Modal from "../components/UI/Modal";
 import LeadForm from "../components/UI/LeadForm";
@@ -49,9 +49,9 @@ const isLeadLocked = (lead: Lead): boolean => {
 };
 
 const LeadsPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<"notScheduled" | "scheduled">("notScheduled");
-  const [selectedMonth, setSelectedMonth] = useState(
-    new Date().toISOString().slice(0, 7)
+  const [activeTab, setActiveTab] = useState<"notScheduled" | "scheduled" | "arrived">("notScheduled");
+  const [selectedYear, setSelectedYear] = useState(
+    new Date().getFullYear().toString()
   );
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -64,9 +64,9 @@ const LeadsPage: React.FC = () => {
   const [statusModalLead, setStatusModalLead] = useState<Lead | null>(null);
   const [viewingLead, setViewingLead] = useState<Lead | null>(null);
 
-  const fetchLeads = async () => {
+  const fetchLeads = async (year: string) => {
     try {
-      const res = await api.get("/lead");
+      const res = await api.get(`/lead?year=${year}`);
 
       const result = res.data;
 
@@ -110,60 +110,62 @@ const LeadsPage: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchLeads();
-  }, []);
+    fetchLeads(selectedYear);
+  }, [selectedYear]);
 
 
   const filteredLeads = useMemo(() => {
-    const [year, month] = selectedMonth.split("-");
-    const monthPrefix = `${year}-${month}`;
-
-    return leads.filter((lead) => {
-      // แท็บ "นัดแล้ว" > กรองจากวันที่นัด
-      // แท็บ "ยังไม่นัด" > กรองจากวันที่สร้าง
-      const matchesMonth =
-        activeTab === "scheduled" && lead.appointmentDate
-          ? lead.appointmentDate.startsWith(monthPrefix)
-          : lead.createdAt?.startsWith(monthPrefix);
-
+    const filtered = leads.filter((lead) => {
       const matchesSearch =
         searchQuery === "" ||
         lead.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         lead.phone.includes(searchQuery) ||
         lead.lineId.toLowerCase().includes(searchQuery.toLowerCase());
 
-      const matchesTab =
-        activeTab === "notScheduled"
-          ? lead.status === "pending"
-          : lead.status !== "pending";
+      let matchesTab = false;
+      if (activeTab === "notScheduled") {
+        matchesTab = lead.status === "pending";
+      } else if (activeTab === "scheduled") {
+        matchesTab = ["scheduled", "rescheduled", "cancelled"].includes(lead.status);
+      } else if (activeTab === "arrived") {
+        matchesTab = lead.status === "arrived";
+      }
 
-      return matchesMonth && matchesSearch && matchesTab;
+      return matchesSearch && matchesTab;
     });
-  }, [leads, selectedMonth, searchQuery, activeTab]);
+
+    if (activeTab === "notScheduled") {
+      filtered.sort((a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+    } else if (activeTab === "scheduled") {
+      filtered.sort((a, b) => {
+        const dateA = a.appointmentDate ? new Date(a.appointmentDate).getTime() : Infinity;
+        const dateB = b.appointmentDate ? new Date(b.appointmentDate).getTime() : Infinity;
+        return dateA - dateB;
+      });
+    } else if (activeTab === "arrived") {
+      filtered.sort((a, b) => {
+        const dateA = a.appointmentDate ? new Date(a.appointmentDate).getTime() : 0;
+        const dateB = b.appointmentDate ? new Date(b.appointmentDate).getTime() : 0;
+        return dateB - dateA;
+      });
+    }
+
+    return filtered;
+  }, [leads, searchQuery, activeTab]);
 
   const summary = useMemo(() => {
-    const [year, month] = selectedMonth.split("-");
-    const monthPrefix = `${year}-${month}`;
-
-    // ทั้งหมด + รอตัดสินใจ > นับจากวันที่สร้าง
-    const leadsCreatedInMonth = leads.filter((lead) =>
-      lead.createdAt?.startsWith(monthPrefix)
-    );
-
-    // ทำนัด + ยกเลิก > นับจากวันที่นัด
-    const leadsWithApptInMonth = leads.filter((lead) =>
-      lead.appointmentDate?.startsWith(monthPrefix)
-    );
-
     return {
-      total: leadsCreatedInMonth.length,
-      withAppointment: leadsWithApptInMonth.filter((l) =>
+      total: leads.length,
+      withAppointment: leads.filter((l) =>
         ["scheduled", "rescheduled"].includes(l.status)
       ).length,
-      waiting: leadsCreatedInMonth.filter((l) => l.status === "pending").length,
-      cancelled: leadsWithApptInMonth.filter((l) => l.status === "cancelled").length,
+      waiting: leads.filter((l) => l.status === "pending").length,
+      arrived: leads.filter((l) => l.status === "arrived").length,
+      cancelled: leads.filter((l) => l.status === "cancelled").length,
     };
-  }, [leads, selectedMonth]);
+  }, [leads]);
 
   const handleSave = async (lead: Lead) => {
     try {
@@ -219,7 +221,7 @@ const LeadsPage: React.FC = () => {
         await api.patch(`/${lead.id}`, payload);
       }
 
-      await fetchLeads();
+      await fetchLeads(selectedYear);
       setIsModalOpen(false);
       setEditingLead(null);
     } catch (error: any) {
@@ -237,7 +239,7 @@ const LeadsPage: React.FC = () => {
 
     try {
       await api.delete(`/${leadToDelete.id}`);
-      await fetchLeads();
+      await fetchLeads(selectedYear);
     } catch (err) {
       console.error("Delete lead failed", err);
     } finally {
@@ -253,11 +255,10 @@ const LeadsPage: React.FC = () => {
   return (
     <>
       <div className="min-h-screen bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 py-8">
-          <h1 className="text-3xl font-bold mb-2">Leads</h1>
-          <p className="text-gray-600 mb-8">รายชื่อลูกค้าที่ลงข้อมูลและการติดตาม</p>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-2 pb-4 sm:py-8">
+          <p className="hidden sm:block text-gray-600 mb-6">รายชื่อลูกค้าที่ลงข้อมูลและการติดตาม</p>
 
-          <div className="grid grid-cols-4 gap-6 mb-8 max-md:grid-cols-1">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-6 mb-4 sm:mb-8">
             <SummaryBox
               label="ทั้งหมด"
               value={summary.total}
@@ -267,8 +268,8 @@ const LeadsPage: React.FC = () => {
             <SummaryBox
               label="ทำนัดแล้ว"
               value={summary.withAppointment}
-              color="text-green-600"
-              icon={<CalendarCheck className="text-green-500" />}
+              color="text-blue-600"
+              icon={<CalendarCheck className="text-blue-500" />}
             />
 
             <SummaryBox
@@ -276,6 +277,13 @@ const LeadsPage: React.FC = () => {
               value={summary.waiting}
               color="text-orange-600"
               icon={<Clock className="text-orange-500" />}
+            />
+
+            <SummaryBox
+              label="มาแล้ว"
+              value={summary.arrived}
+              color="text-green-600"
+              icon={<UserCheck className="text-green-500" />}
             />
 
             <SummaryBox
@@ -288,10 +296,10 @@ const LeadsPage: React.FC = () => {
 
           <div className="bg-white rounded-lg shadow">
             <div className="shadow">
-              <div className="flex gap-4 px-6">
+              <div className="flex gap-4 px-6 overflow-x-auto">
                 <button
                   onClick={() => setActiveTab("notScheduled")}
-                  className={`py-4 px-6 font-medium border-b-2 transition-colors ${activeTab === "notScheduled"
+                  className={`py-4 px-4 sm:px-6 font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "notScheduled"
                     ? "border-indigo-600 text-indigo-600"
                     : "border-transparent text-gray-500 hover:text-gray-700"
                     }`}
@@ -300,23 +308,46 @@ const LeadsPage: React.FC = () => {
                 </button>
                 <button
                   onClick={() => setActiveTab("scheduled")}
-                  className={`py-4 px-6 font-medium border-b-2 transition-colors ${activeTab === "scheduled"
+                  className={`py-4 px-4 sm:px-6 font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "scheduled"
                     ? "border-indigo-600 text-indigo-600"
                     : "border-transparent text-gray-500 hover:text-gray-700"
                     }`}
                 >
                   นัดแล้ว
                 </button>
+                <button
+                  onClick={() => setActiveTab("arrived")}
+                  className={`py-4 px-4 sm:px-6 font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "arrived"
+                    ? "border-indigo-600 text-indigo-600"
+                    : "border-transparent text-gray-500 hover:text-gray-700"
+                    }`}
+                >
+                  มาแล้ว
+                </button>
               </div>
             </div>
 
             <div className="p-6 shadow flex gap-4 max-md:flex-col">
-              <input
-                type="month"
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-                className="px-4 py-2 shadow rounded-md"
-              />
+              <select
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(e.target.value)}
+                className="px-4 py-2 shadow rounded-md bg-white min-w-[120px]"
+              >
+                {(() => {
+                  const START_YEAR = 2024;
+                  const currentYear = new Date().getFullYear();
+                  const years = [];
+
+                  for (let year = currentYear; year >= START_YEAR; year--) {
+                    years.push(
+                      <option key={year} value={year.toString()}>
+                        {year + 543}
+                      </option>
+                    );
+                  }
+                  return years;
+                })()}
+              </select>
 
               <div className="flex items-center w-full shadow rounded-md px-3">
                 <Search className="w-5 h-5 text-gray-400 mr-2" />
@@ -343,15 +374,30 @@ const LeadsPage: React.FC = () => {
                   <tr>
                     <th className="px-6 py-4 text-left font-semibold">ชื่อ</th>
                     <th className="px-6 py-4 text-left font-semibold">โทร</th>
-                    <th className="px-6 py-4 text-left font-semibold">วันที่สร้าง</th>
+
+                    {activeTab === "notScheduled" && (
+                      <>
+                        <th className="px-6 py-4 text-left font-semibold">วันที่สร้าง</th>
+                        <th className="px-6 py-4 text-left font-semibold">ช่องทางที่รู้จักคลินิก</th>
+                      </>
+                    )}
 
                     {activeTab === "scheduled" && (
                       <>
+                        <th className="px-6 py-4 text-left font-semibold">วันที่สร้าง</th>
                         <th className="px-6 py-4 text-left font-semibold">วันที่นัด</th>
                         <th className="px-6 py-4 text-center font-semibold">
                           ระยะเวลาก่อนวันนัด
                         </th>
                         <th className="px-6 py-4 text-center font-semibold">สถานะ</th>
+                      </>
+                    )}
+
+                    {activeTab === "arrived" && (
+                      <>
+                        <th className="px-6 py-4 text-left font-semibold">วันที่มา</th>
+                        <th className="px-6 py-4 text-left font-semibold">หัตถการที่สนใจ</th>
+                        <th className="px-6 py-4 text-right font-semibold">ยอดชำระ</th>
                       </>
                     )}
 
@@ -362,7 +408,7 @@ const LeadsPage: React.FC = () => {
                 <tbody className="border-t">
                   {filteredLeads.length === 0 ? (
                     <tr>
-                      <td colSpan={activeTab === "scheduled" ? 7 : 4} className="px-6 py-16 text-center">
+                      <td colSpan={activeTab === "scheduled" ? 7 : activeTab === "arrived" ? 6 : 4} className="px-6 py-16 text-center">
                         <div className="flex flex-col items-center justify-center text-gray-400">
                           <Users className="w-12 h-12 mb-4 opacity-50" />
                           <p className="text-lg font-medium text-gray-500">ยังไม่มีข้อมูล</p>
@@ -384,12 +430,24 @@ const LeadsPage: React.FC = () => {
                           {lead.phone}
                         </td>
 
-                        <td className="px-6 py-4 text-gray-500">
-                          {lead.createdAtDisplay}
-                        </td>
+                        {activeTab === "notScheduled" && (
+                          <>
+                            <td className="px-6 py-4 text-gray-500">
+                              {lead.createdAtDisplay}
+                            </td>
+
+                            <td className="px-6 py-4 text-gray-500">
+                              {lead.referralChannel}
+                            </td>
+                          </>
+                        )}
 
                         {activeTab === "scheduled" && (
                           <>
+                            <td className="px-6 py-4 text-gray-500">
+                              {lead.createdAtDisplay}
+                            </td>
+
                             <td className="px-6 py-4 text-gray-700">
                               {lead.appointmentDateDisplay}
                             </td>
@@ -398,10 +456,6 @@ const LeadsPage: React.FC = () => {
                               {lead.appointmentDate && (
                                 <span className="font-medium">
                                   {lead.status === "cancelled" && "-"}
-
-                                  {lead.status === "arrived" && (
-                                    <span className="text-green-600">ถึงวันนัดแล้ว</span>
-                                  )}
 
                                   {["scheduled", "rescheduled"].includes(lead.status) && (() => {
                                     const days = getDaysUntilAppointment(lead.appointmentDate);
@@ -431,17 +485,35 @@ const LeadsPage: React.FC = () => {
                                     ? `bg-blue-100 text-blue-700 ${isLeadLocked(lead) ? "cursor-not-allowed" : "hover:bg-blue-200"}`
                                     : lead.status === "rescheduled"
                                       ? `bg-yellow-100 text-yellow-700 ${isLeadLocked(lead) ? "cursor-not-allowed" : "hover:bg-yellow-200"}`
-                                      : lead.status === "arrived"
-                                        ? `bg-green-100 text-green-700 ${isLeadLocked(lead) ? "cursor-not-allowed" : "hover:bg-green-200"}`
-                                        : lead.status === "cancelled"
-                                          ? `bg-red-100 text-red-700 ${isLeadLocked(lead) ? "cursor-not-allowed" : "hover:bg-red-200"}`
-                                          : `bg-gray-100 text-gray-700 ${isLeadLocked(lead) ? "cursor-not-allowed" : "hover:bg-gray-200"}`
+                                      : lead.status === "cancelled"
+                                        ? `bg-red-100 text-red-700 ${isLeadLocked(lead) ? "cursor-not-allowed" : "hover:bg-red-200"}`
+                                        : `bg-gray-100 text-gray-700 ${isLeadLocked(lead) ? "cursor-not-allowed" : "hover:bg-gray-200"}`
                                   }
   `}
                               >
                                 {statusLabel[lead.status]}
                               </button>
 
+                            </td>
+                          </>
+                        )}
+
+                        {activeTab === "arrived" && (
+                          <>
+                            <td className="px-6 py-4 text-gray-700">
+                              {lead.appointmentDateDisplay}
+                            </td>
+
+                            <td className="px-6 py-4 text-gray-600">
+                              {lead.interest && lead.interest.length > 0
+                                ? lead.interest.map((i: any) => i.name || i).join(", ")
+                                : "-"}
+                            </td>
+
+                            <td className="px-6 py-4 text-right font-medium text-green-600">
+                              {lead.payments?.amount
+                                ? `${lead.payments.amount.toLocaleString()} บาท`
+                                : "-"}
                             </td>
                           </>
                         )}
@@ -493,7 +565,7 @@ const LeadsPage: React.FC = () => {
           lead={statusModalLead}
           onClose={() => setStatusModalLead(null)}
           onSave={async () => {
-            await fetchLeads();
+            await fetchLeads(selectedYear);
             setStatusModalLead(null);
           }}
         />
@@ -509,7 +581,7 @@ const LeadsPage: React.FC = () => {
       <Modal
         isOpen={isModalOpen}
         onClose={() => { setIsModalOpen(false); setEditingLead(null); }}
-        title={editingLead ? "แก้ไขข้อมูล Lead" : "เพิ่มข้อมูล Lead"}
+        title={editingLead ? "แก้ไขข้อมูล" : "เพิ่มข้อมูล"}
       >
         <LeadForm
           lead={editingLead}
@@ -550,7 +622,7 @@ type SummaryBoxProps = {
   label: string;
   value: number;
   color?: string;
-  icon?: ReactNode;
+  icon?: React.ReactNode;
 };
 
 const SummaryBox = ({ label, value, color = "text-gray-800", icon }: SummaryBoxProps) => {
@@ -596,7 +668,6 @@ const StatusModal = ({
   const [serviceChargeRate, setServiceChargeRate] = useState<number>(3);
   const [commissionEnabled, setCommissionEnabled] = useState(false);
 
-  // นัดหมายครั้งถัดไป
   const [nextAppointmentEnabled, setNextAppointmentEnabled] = useState(false);
   const [nextAppointmentDate, setNextAppointmentDate] = useState("");
   const [nextAppointmentTime, setNextAppointmentTime] = useState("");
@@ -613,7 +684,6 @@ const StatusModal = ({
 
   const netAmount = totalAmount - serviceChargeAmount;
 
-  // คำนวณค่าคอมแต่ละหัตถการ — ถ้าบัตรเครดิตให้คิดจากยอดหลังหัก SC
   const commissionDetails = commissionEnabled
     ? procedures
       .filter((p) => p.name && parseFloat(p.price) > 0 && p.commissionRate > 0)
@@ -686,7 +756,6 @@ const StatusModal = ({
           };
         }
 
-        // Commission
         if (commissionEnabled) {
           const details = validProcedures
             .filter((p) => p.commissionRate > 0)
@@ -747,7 +816,6 @@ const StatusModal = ({
 
       await api.patch(`/${lead.id}`, payload);
 
-      // สร้าง Lead ใหม่สำหรับนัดหมายครั้งถัดไป
       if (selectedStatus === "arrived" && nextAppointmentEnabled) {
         const hasNextDate = nextAppointmentDate && nextAppointmentTime;
 
@@ -808,18 +876,18 @@ const StatusModal = ({
 
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="flex justify-between items-center px-6 py-4 border-b">
-          <h2 className="text-lg font-semibold">อัปเดตสถานะ Lead</h2>
+      <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+        <div className="flex justify-between items-center px-6 py-3 bg-[#1479FF] shrink-0">
+          <h2 className="text-base font-semibold text-white">อัปเดตสถานะ</h2>
           <button
             onClick={onClose}
-            className="p-1 rounded-full hover:bg-gray-100"
+            className="p-1 rounded-full hover:bg-white/20 transition-colors"
           >
-            <X className="w-5 h-5 text-gray-500" />
+            <X className="w-5 h-5 text-white" />
           </button>
         </div>
 
-        <div className="p-6 space-y-6">
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
           <div>
             <label className="block text-sm font-medium mb-3">
               เลือกสถานะ
@@ -849,6 +917,20 @@ const StatusModal = ({
 
           {selectedStatus === "arrived" && (
             <div className="space-y-6 border-t pt-6">
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                      <Wallet className="w-5 h-5 text-blue-600" />
+                    </div>
+                    <span className="text-sm font-medium text-gray-700">เงินมัดจำ</span>
+                  </div>
+                  <span className="text-lg font-bold text-blue-700">
+                    {lead.deposit?.amount ? lead.deposit.amount.toLocaleString() : 0} บาท
+                  </span>
+                </div>
+              </div>
+
               <h3 className="font-semibold text-gray-700">
                 ข้อมูลการทำหัตถการ
               </h3>
@@ -1117,7 +1199,7 @@ const StatusModal = ({
                 <div className="flex items-center justify-between">
                   <div>
                     <span className="text-sm font-medium text-gray-700">นัดหมายครั้งถัดไป</span>
-                    <p className="text-xs text-gray-400 mt-0.5">สร้าง Lead ใหม่สำหรับการนัดหมายครั้งถัดไป</p>
+                    <p className="text-xs text-gray-400 mt-0.5">สร้างข้อมูลใหม่สำหรับการนัดหมายครั้งถัดไป</p>
                   </div>
                   <button
                     type="button"
@@ -1163,8 +1245,8 @@ const StatusModal = ({
                     </div>
                     <p className="text-xs text-gray-500">
                       {nextAppointmentDate
-                        ? `จะสร้าง Lead ใหม่สถานะ "ทำนัด" วันที่สร้างจะเป็นวันที่ 1 ของเดือน ${new Date(nextAppointmentDate).toLocaleDateString('th-TH', { month: 'long', year: 'numeric' })}`
-                        : 'ไม่ระบุวันที่ = สร้าง Lead ใหม่สถานะ "รอตัดสินใจ" วันที่สร้างเป็นวันนี้'
+                        ? `จะสร้างข้อมูลใหม่สถานะ "ทำนัด" โดยจะสร้างเป็นวันที่ 1 ของเดือน ${new Date(nextAppointmentDate).toLocaleDateString('th-TH', { month: 'long', year: 'numeric' })}`
+                        : 'ถ้ายังไม่ระบุวันนัด ไม่ต้องใส่วันที่และเวลา โดยจะเป็นสถานะ "รอตัดสินใจ"'
                       }
                     </p>
                   </div>
@@ -1212,17 +1294,17 @@ const StatusModal = ({
           )}
         </div>
 
-        <div className="flex justify-end gap-3 px-6 py-4 border-t bg-gray-50 rounded-b-2xl">
+        <div className="flex justify-end gap-3 px-6 py-3 bg-gray-50 shrink-0">
           <button
             onClick={onClose}
-            className="px-4 py-2 border rounded-md text-sm"
+            className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors"
           >
             ยกเลิก
           </button>
           <button
             onClick={handleSave}
             disabled={!selectedStatus}
-            className="px-5 py-2 bg-indigo-600 text-white rounded-md text-sm hover:bg-indigo-700 disabled:bg-gray-300"
+            className="px-5 py-2 bg-[#1479FF] text-white rounded-lg text-sm font-medium hover:bg-[#0066E6] disabled:bg-gray-300 transition-colors"
           >
             บันทึก
           </button>
@@ -1240,7 +1322,7 @@ const ViewLeadModal = ({
   onClose: () => void;
 }) => {
   const interestDisplay = Array.isArray(lead.interest)
-    ? lead.interest.map((i) => `${i.name} (${Number(i.price).toLocaleString()} บาท)`).join(", ")
+    ? lead.interest.map((i) => `${i.name}`)
     : "ไม่มี";
 
   const proceduresDisplay = Array.isArray(lead.procedures) && lead.procedures.length > 0
@@ -1265,18 +1347,15 @@ const ViewLeadModal = ({
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-2 sm:p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[95vh] sm:max-h-[90vh] flex flex-col">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[95vh] sm:max-h-[90vh] flex flex-col overflow-hidden">
 
-        <div className="flex justify-between items-center px-4 sm:px-6 py-4 border-b bg-white rounded-t-2xl shrink-0">
-          <div>
-            <h2 className="text-lg sm:text-xl font-bold text-gray-800">รายละเอียด Lead</h2>
-            <p className="text-xs sm:text-sm text-gray-500 mt-0.5">{lead.name}</p>
-          </div>
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3 bg-[#1479FF]">
+          <h2 className="text-base font-semibold text-white">รายละเอียด</h2>
           <button
             onClick={onClose}
-            className="p-2 rounded-full hover:bg-gray-100 transition-colors"
+            className="p-1 rounded-full hover:bg-white/20 transition-colors"
           >
-            <X className="w-5 h-5 text-gray-500" />
+            <X className="w-5 h-5 text-white" />
           </button>
         </div>
 
@@ -1459,16 +1538,15 @@ const ViewLeadModal = ({
               <p className="text-sm text-gray-700 whitespace-pre-wrap bg-white rounded-lg p-3">{lead.note}</p>
             </div>
           )}
-
-          <div className="text-xs text-gray-400 text-center pt-2">
-            สร้างเมื่อ: {lead.createdAtDisplay}
-          </div>
         </div>
 
-        <div className="flex justify-end px-4 sm:px-6 py-4 border-t bg-gray-50 rounded-b-2xl shrink-0">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3 bg-gray-50">
+          <p className="text-xs text-gray-400">
+            สร้างเมื่อ: {lead.createdAtDisplay}
+          </p>
           <button
             onClick={onClose}
-            className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
+            className="px-5 py-2 bg-[#1479FF] text-white rounded-lg text-sm font-medium hover:bg-[#0066E6] transition-colors"
           >
             ปิด
           </button>
