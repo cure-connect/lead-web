@@ -362,17 +362,17 @@ const LeadsPage: React.FC = () => {
                 <input
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="ค้นหา Lead..."
+                  placeholder="ค้นหาข้อมูลคนไข้"
                   className="w-full py-2 outline-none text-sm"
                 />
               </div>
 
               <button
                 onClick={() => { setEditingLead(null); setIsModalOpen(true); }}
-                className="flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 bg-indigo-600 text-white rounded-md whitespace-nowrap text-sm font-medium"
+                className="flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 bg-[#1479FF] text-white rounded-md whitespace-nowrap text-sm font-medium"
               >
                 <Plus className="w-5 h-5" />
-                เพิ่ม Lead
+                เพิ่ม
               </button>
             </div>
 
