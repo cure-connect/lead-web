@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useEffect } from "react";
-import { Search, Plus, Edit2, Trash2, X, Users, CalendarCheck, Clock, XCircle, Eye, UserCheck, Wallet, Calendar, ChevronRight, User } from "lucide-react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
+import { Search, Plus, Edit2, Trash2, X, Users, CalendarCheck, Clock, XCircle, Eye, UserCheck, Wallet, Calendar, ChevronRight, User, Upload, ImageIcon, Loader2 } from "lucide-react";
 import { type Lead } from "../types";
 import Modal from "../components/UI/Modal";
 import LeadForm from "../components/UI/LeadForm";
@@ -77,9 +77,10 @@ const LeadsPage: React.FC = () => {
 
         return {
           id: item._id,
-          name: item.patient?.name || "",
+          name: item.patient?.fullname || "",
+          nickname: item.patient?.nickname || "",
           phone: item.patient?.tel || "",
-          lineId: item.patient?.lineId || "",
+          socialMedia: item.patient?.socialMedia || "",
           interest: Array.isArray(item.interests) ? item.interests : [],
           referralChannel: item.referralChannel || "",
           admin: item.createdBy || "",
@@ -95,6 +96,7 @@ const LeadsPage: React.FC = () => {
           payments: item.payments,
           procedures: Array.isArray(item.procedures) ? item.procedures : [],
           deposit: item.deposit,
+          receiptUrl: item.receiptUrl || "",
         };
       });
 
@@ -119,8 +121,9 @@ const LeadsPage: React.FC = () => {
       const matchesSearch =
         searchQuery === "" ||
         lead.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (lead.nickname && lead.nickname.toLowerCase().includes(searchQuery.toLowerCase())) ||
         lead.phone.includes(searchQuery) ||
-        lead.lineId.toLowerCase().includes(searchQuery.toLowerCase());
+        (lead.socialMedia && lead.socialMedia.toLowerCase().includes(searchQuery.toLowerCase()));
 
       let matchesTab = false;
       if (activeTab === "notScheduled") {
@@ -171,7 +174,12 @@ const LeadsPage: React.FC = () => {
     try {
       const payload: any = {
         clinic: { branch: lead.branch },
-        patient: { name: lead.name, tel: lead.phone, lineId: lead.lineId || undefined },
+        patient: {
+          fullname: lead.name,
+          nickname: lead.nickname || undefined,
+          tel: lead.phone,
+          socialMedia: lead.socialMedia || undefined
+        },
         interests: [lead.interest],
         referralChannel: lead.referralChannel,
         note: lead.note,
@@ -425,7 +433,7 @@ const LeadsPage: React.FC = () => {
                         className="hover:bg-gray-50 transition-colors"
                       >
                         <td className="px-6 py-4 font-medium text-gray-900">
-                          {lead.name}
+                          {lead.name}{lead.nickname && <span className="text-gray-500 font-normal"> ({lead.nickname})</span>}
                         </td>
 
                         <td className="px-6 py-4 text-gray-600">
@@ -578,7 +586,9 @@ const LeadsPage: React.FC = () => {
                     <div key={lead.id} className="p-4 hover:bg-gray-50 transition-colors">
                       <div className="flex items-start justify-between mb-1">
                         <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-gray-900 truncate">{lead.name}</h3>
+                          <h3 className="font-semibold text-gray-900 truncate">
+                            {lead.name}{lead.nickname && <span className="text-gray-500 font-normal"> ({lead.nickname})</span>}
+                          </h3>
                           <p className="text-sm text-gray-500">{lead.phone}</p>
                         </div>
 
@@ -750,7 +760,7 @@ const LeadsPage: React.FC = () => {
           <div className="bg-white w-full sm:max-w-sm sm:mx-4 p-6 rounded-t-2xl sm:rounded-2xl">
             <h3 className="font-semibold text-lg mb-4">ยืนยันการลบ</h3>
             <p className="text-sm text-gray-600 mb-6">
-              ต้องการลบ <b>{leadToDelete?.name}</b> ใช่หรือไม่?
+              ต้องการลบ <b>{leadToDelete?.name}{leadToDelete?.nickname && ` (${leadToDelete.nickname})`}</b> ใช่หรือไม่?
             </p>
             <div className="flex justify-end gap-2">
               <button
@@ -828,6 +838,44 @@ const StatusModal = ({
   const [nextAppointmentTime, setNextAppointmentTime] = useState("");
   const [validationError, setValidationError] = useState("");
 
+  const [patientName, setPatientName] = useState(lead.name || "");
+  const [nickname, setNickname] = useState(lead.nickname || "");
+
+  const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
+  const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
+  const [receiptUploading, setReceiptUploading] = useState(false);
+  const receiptInputRef = useRef<HTMLInputElement>(null);
+
+  const handleReceiptUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => setReceiptPreview(reader.result as string);
+    reader.readAsDataURL(file);
+
+    setReceiptUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('slip', file);
+      const res = await api.post('/upload/slip', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      setReceiptUrl(res.data.data.url);
+    } catch (err) {
+      console.error('Upload receipt failed', err);
+      setReceiptPreview(null);
+    } finally {
+      setReceiptUploading(false);
+    }
+  };
+
+  const removeReceipt = () => {
+    setReceiptUrl(null);
+    setReceiptPreview(null);
+    if (receiptInputRef.current) receiptInputRef.current.value = '';
+  };
+
 
   const totalAmount = procedures.reduce(
     (sum, p) => sum + (parseFloat(p.price) || 0),
@@ -897,6 +945,10 @@ const StatusModal = ({
         }
         if (!paymentMethod) {
           setValidationError("กรุณาเลือกช่องทางการชำระเงิน");
+          return;
+        }
+        if (!receiptUrl) {
+          setValidationError("กรุณาอัปโหลดรูปใบเสร็จ");
           return;
         }
       }
@@ -969,6 +1021,18 @@ const StatusModal = ({
         ...(payments ? { payments } : {}),
       };
 
+      if (selectedStatus === "arrived") {
+        payload.patient = {
+          fullname: patientName || lead.name,
+          nickname: nickname || undefined,
+          tel: lead.phone,
+          socialMedia: lead.socialMedia || undefined,
+        };
+        if (receiptUrl) {
+          payload.receiptUrl = receiptUrl;
+        }
+      }
+
       if (selectedStatus === "scheduled") {
         payload.appointments.date =
           lead.appointmentDate && lead.appointmentTime
@@ -992,9 +1056,10 @@ const StatusModal = ({
         const nextLeadPayload: any = {
           clinic: { branch: lead.branch },
           patient: {
-            name: lead.name,
+            fullname: patientName || lead.name,
+            nickname: nickname || undefined,
             tel: lead.phone,
-            lineId: lead.lineId || undefined
+            socialMedia: lead.socialMedia || undefined
           },
           interests: lead.interest,
           referralChannel: lead.referralChannel,
@@ -1028,6 +1093,11 @@ const StatusModal = ({
       onSave({
         ...lead,
         ...payload,
+        ...(selectedStatus === "arrived" ? {
+          name: patientName || lead.name,
+          nickname: nickname || undefined,
+          receiptUrl: receiptUrl || undefined,
+        } : {}),
       });
 
       onClose();
@@ -1038,12 +1108,34 @@ const StatusModal = ({
   };
 
   const statusButtons = [
-    { value: "arrived", label: "มาตามนัด", activeClass: "bg-blue-600 text-white" },
-    { value: "rescheduled", label: "เลื่อนนัด", activeClass: "bg-yellow-500 text-white" },
-    { value: "cancelled", label: "ยกเลิกนัด", activeClass: "bg-red-600 text-white" },
+    {
+      value: "arrived",
+      label: "มาตามนัด",
+      icon: <UserCheck className="w-4 h-4" />,
+      activeBg: "bg-green-50",
+      activeBorder: "border-green-500",
+      activeText: "text-green-700",
+      iconBg: "bg-green-100",
+    },
+    {
+      value: "rescheduled",
+      label: "เลื่อนนัด",
+      icon: <Calendar className="w-4 h-4" />,
+      activeBg: "bg-amber-50",
+      activeBorder: "border-amber-500",
+      activeText: "text-amber-700",
+      iconBg: "bg-amber-100",
+    },
+    {
+      value: "cancelled",
+      label: "ยกเลิกนัด",
+      icon: <XCircle className="w-4 h-4" />,
+      activeBg: "bg-red-50",
+      activeBorder: "border-red-500",
+      activeText: "text-red-700",
+      iconBg: "bg-red-100",
+    },
   ];
-
-
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center z-50">
       <div className="bg-white w-full sm:max-w-2xl sm:w-full sm:mx-4 max-h-[85dvh] sm:max-h-[85vh] flex flex-col shadow-xl overflow-hidden rounded-t-2xl sm:rounded-2xl">
@@ -1059,11 +1151,11 @@ const StatusModal = ({
 
         <div className="flex-1 overflow-y-auto p-4 pb-6 sm:p-6 space-y-6 overscroll-contain">
           <div>
-            <label className="block text-sm font-medium mb-3">
+            <label className="block text-sm font-medium text-gray-700 mb-3">
               เลือกสถานะ
             </label>
 
-            <div className="grid grid-cols-3 rounded-xl overflow-hidden border">
+            <div className="grid grid-cols-3 gap-3">
               {statusButtons.map((btn) => {
                 const isActive = selectedStatus === btn.value;
                 return (
@@ -1074,13 +1166,15 @@ const StatusModal = ({
                       setSelectedStatus(btn.value);
                       setValidationError("");
                     }}
-                    className={`py-3 text-sm font-medium transition
+                    className={`
+                      flex items-center gap-1.5 px-3 py-3 rounded-lg border transition-all text-sm font-medium
                       ${isActive
-                        ? btn.activeClass
-                        : "bg-white hover:bg-gray-100 text-gray-700"
+                        ? `${btn.activeBg} ${btn.activeBorder} ${btn.activeText}`
+                        : "bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50"
                       }
                     `}
                   >
+                    {btn.icon}
                     {btn.label}
                   </button>
                 );
@@ -1089,7 +1183,38 @@ const StatusModal = ({
           </div>
 
           {selectedStatus === "arrived" && (
-            <div className="space-y-6 border-t pt-6">
+            <div className="space-y-6 pt-6">
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-4">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-gray-100 rounded-lg">
+                    <User className="w-5 h-5 text-gray-600" />
+                  </div>
+                  <span className="text-sm font-semibold text-gray-700">ข้อมูลคนไข้</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">ชื่อ-นามสกุล</label>
+                    <input
+                      type="text"
+                      value={patientName}
+                      onChange={(e) => setPatientName(e.target.value)}
+                      placeholder="ชื่อ-นามสกุล"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">ชื่อเล่น</label>
+                    <input
+                      type="text"
+                      value={nickname}
+                      onChange={(e) => setNickname(e.target.value)}
+                      placeholder="ชื่อเล่น"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500 bg-white"
+                    />
+                  </div>
+                </div>
+              </div>
+
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -1111,7 +1236,7 @@ const StatusModal = ({
               {procedures.map((procedure, index) => (
                 <div
                   key={index}
-                  className="bg-gray-50 p-4 rounded-xl space-y-3"
+                  className="bg-gray-50 p-4 rounded-xl space-y-3 border border-gray-200"
                 >
                   <div className="flex gap-3 items-end">
                     <div className="flex-1">
@@ -1121,7 +1246,7 @@ const StatusModal = ({
                         placeholder="ชื่อหัตถการ"
                         value={procedure.name}
                         onChange={(e) => updateProcedure(index, "name", e.target.value)}
-                        className="w-full px-3 py-2 border rounded-md bg-white"
+                        className="w-full px-3 py-2 border border-gray-200 rounded-md bg-white"
                       />
                     </div>
 
@@ -1132,7 +1257,7 @@ const StatusModal = ({
                         placeholder="0"
                         value={procedure.price ?? ""}
                         onChange={(e) => updateProcedure(index, "price", e.target.value)}
-                        className="w-full px-3 py-2 border rounded-md bg-white text-right"
+                        className="w-full px-3 py-2 border border-gray-200 rounded-md bg-white text-right"
                       />
                     </div>
 
@@ -1150,7 +1275,7 @@ const StatusModal = ({
                             onChange={(e) =>
                               updateProcedure(index, "commissionRate", parseFloat(e.target.value) || 0)
                             }
-                            className="w-full px-3 py-2 pr-8 border rounded-md text-right bg-white"
+                            className="w-full px-3 py-2 pr-8 border border-gray-200 rounded-md text-right bg-white"
                           />
                           <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">%</span>
                         </div>
@@ -1211,7 +1336,7 @@ const StatusModal = ({
                         );
                       }
                     }}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${commissionEnabled ? "bg-purple-600" : "bg-gray-200"
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${commissionEnabled ? "bg-[#1479FF]" : "bg-gray-200"
                       }`}
                   >
                     <span
@@ -1261,9 +1386,9 @@ const StatusModal = ({
                     setPaymentMethod(e.target.value);
                     setValidationError("");
                   }}
-                  className="w-full px-4 py-2.5 border rounded-lg"
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg"
                 >
-                  <option value="">-- เลือกช่องทาง --</option>
+                  <option value="">เลือกช่องทางชำระเงิน</option>
                   <option value="cash">เงินสด</option>
                   <option value="transfer">โอนเงิน</option>
                   <option value="card">บัตรเครดิต</option>
@@ -1372,6 +1497,54 @@ const StatusModal = ({
               )}
 
               <div className="border border-gray-200 rounded-lg p-4 space-y-4">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-amber-100 rounded-lg">
+                    <ImageIcon className="w-5 h-5 text-amber-600" />
+                  </div>
+                  <span className="text-sm font-semibold text-gray-700">ใบเสร็จ / หลักฐานการรับชำระ <span className="text-red-500">*</span></span>
+                </div>
+
+                {!receiptPreview ? (
+                  <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-xl cursor-pointer bg-gray-50 hover:bg-gray-100 transition-colors">
+                    <div className="flex flex-col items-center justify-center py-4">
+                      <Upload className="w-8 h-8 text-gray-400 mb-2" />
+                      <p className="text-sm text-gray-500">คลิกเพื่ออัปโหลดรูปใบเสร็จ</p>
+                      <p className="text-xs text-gray-400 mt-1">PNG, JPG ไม่เกิน 5MB</p>
+                    </div>
+                    <input
+                      ref={receiptInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleReceiptUpload}
+                      className="hidden"
+                    />
+                  </label>
+                ) : (
+                  <div className="relative">
+                    <img
+                      src={receiptPreview}
+                      alt="Receipt preview"
+                      className="w-full h-48 object-contain rounded-lg border border-gray-200 bg-gray-50"
+                    />
+                    {receiptUploading && (
+                      <div className="absolute inset-0 bg-white/80 flex items-center justify-center rounded-lg">
+                        <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+                      </div>
+                    )}
+                    {!receiptUploading && (
+                      <button
+                        type="button"
+                        onClick={removeReceipt}
+                        className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="border border-gray-200 rounded-lg p-4 space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <span className="text-sm font-medium text-gray-700">นัดหมายครั้งถัดไป</span>
@@ -1389,7 +1562,7 @@ const StatusModal = ({
                         setNextAppointmentTime("");
                       }
                     }}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${nextAppointmentEnabled ? "bg-indigo-600" : "bg-gray-200"}`}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${nextAppointmentEnabled ? "bg-[#1479FF]" : "bg-gray-200"}`}
                   >
                     <span
                       className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${nextAppointmentEnabled ? "translate-x-6" : "translate-x-1"}`}
@@ -1431,43 +1604,6 @@ const StatusModal = ({
 
             </div>
           )}
-
-          {/* {selectedStatus === "rescheduled" && (
-            <div className="space-y-4 border-t pt-6">
-              <h3 className="font-semibold text-gray-700">
-                กำหนดนัดใหม่
-              </h3>
-
-              <div className="flex gap-3">
-                <div className="flex-1 min-w-0">
-                  <label className="block text-sm font-medium mb-2">
-                    วันที่นัด
-                  </label>
-                  <input
-                    type="date"
-                    value={newAppointmentDate}
-                    onChange={(e) =>
-                      setNewAppointmentDate(e.target.value)
-                    }
-                    className="w-full px-3 py-2 border rounded-md text-sm"
-                  />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <label className="block text-sm font-medium mb-2">
-                    เวลานัด
-                  </label>
-                  <input
-                    type="time"
-                    value={newAppointmentTime}
-                    onChange={(e) =>
-                      setNewAppointmentTime(e.target.value)
-                    }
-                    className="w-full px-3 py-2 border rounded-md text-sm"
-                  />
-                </div>
-              </div>
-            </div>
-          )} */}
 
           {selectedStatus === "rescheduled" && (
             <div className="space-y-5 mt-4">
@@ -1611,8 +1747,9 @@ const ViewLeadModal = ({
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <InfoItem label="ชื่อนามสกุล" value={lead.name} />
+              <InfoItem label="ชื่อเล่น" value={lead.nickname || "-"} />
               <InfoItem label="เบอร์ติดต่อ" value={lead.phone} />
-              <InfoItem label="Line ID" value={lead.lineId || "-"} />
+              <InfoItem label="Social Media" value={lead.socialMedia || "-"} />
               <InfoItem label="ช่องทางที่รู้จัก" value={lead.referralChannel || "-"} />
             </div>
           </div>
@@ -1748,6 +1885,34 @@ const ViewLeadModal = ({
                         <div className="flex justify-between pt-1 border-t border-purple-200">
                           <span className="font-semibold text-gray-800">รวม</span>
                           <span className="font-bold text-purple-600">{lead.payments.commission.totalAmount?.toLocaleString()} บาท</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {lead.receiptUrl && (
+                    <div className="mt-3">
+                      <label className="text-xs font-medium text-gray-500 block mb-2">ใบเสร็จ / หลักฐานการรับชำระ</label>
+                      <div
+                        className="relative bg-white rounded-lg overflow-hidden border border-violet-200 cursor-pointer hover:shadow-md transition-shadow"
+                        onClick={() => {
+                          const url = lead.receiptUrl?.startsWith('http')
+                            ? lead.receiptUrl
+                            : `${import.meta.env.VITE_API_URL || ''}${lead.receiptUrl}`;
+                          window.open(url, '_blank');
+                        }}
+                      >
+                        <img
+                          src={lead.receiptUrl.startsWith('http')
+                            ? lead.receiptUrl
+                            : `${import.meta.env.VITE_API_URL || ''}${lead.receiptUrl}`}
+                          alt="ใบเสร็จ"
+                          className="w-full max-h-48 object-contain"
+                        />
+                        <div className="absolute inset-0 bg-black/0 hover:bg-black/10 transition-colors flex items-center justify-center">
+                          <span className="opacity-0 hover:opacity-100 text-white text-xs bg-black/50 px-2 py-1 rounded">
+                            คลิกเพื่อดูขนาดเต็ม
+                          </span>
                         </div>
                       </div>
                     </div>

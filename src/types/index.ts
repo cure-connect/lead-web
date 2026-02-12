@@ -33,15 +33,16 @@ export interface Lead {
   _id: any;
   id: string;
 
-  name: string
+  name: string;
+  nickname?: string;
   phone: string;
-  lineId: string;
+  socialMedia?: string;
 
   interest?: Array<{
     name: string;
     procedureId?: string;
   }>;
-  
+
   referralChannel: string;
   admin: string;
   branch: string;
@@ -54,11 +55,12 @@ export interface Lead {
   appointmentTime?: string;
 
   appointmentDateDisplay?: string;
-  createdAtDisplay: string
+  createdAtDisplay: string;
   note: string;
   createdAt: string;
   payments?: LeadPayment;
   deposit?: LeadDeposit;
+  receiptUrl?: string;
   procedures?: Array<{
     name: string;
     price: string;

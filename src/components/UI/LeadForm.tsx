@@ -15,10 +15,11 @@ type InterestFormValue = {
 
 type LeadFormState = {
   name: string;
+  nickname: string;
   phone: string;
   interest: InterestFormValue;
   referralChannel: string;
-  lineId: string;
+  socialMedia: string;
   admin: string;
   branch: string;
   status: string;
@@ -57,12 +58,13 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
   const [branches, setBranches] = useState<{ _id: string, name: string }[]>([]);
   const [formData, setFormData] = useState<LeadFormState>({
     name: lead?.name || '',
+    nickname: lead?.nickname || '',
     phone: lead?.phone || '',
     interest: {
       name: lead?.interest?.[0]?.name || '',
     },
     referralChannel: lead?.referralChannel || '',
-    lineId: lead?.lineId || '',
+    socialMedia: lead?.socialMedia || '',
     admin: lead?.admin || '',
     branch: lead?.branch || '',
     status: lead?.status === 'scheduled' || lead?.status === 'rescheduled' ? 'ทำนัด' : 'รอตัดสินใจ',
@@ -301,6 +303,18 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
               {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name}</p>}
             </div>
             <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">ชื่อเล่น</label>
+              <input
+                type="text"
+                value={formData.nickname}
+                onChange={(e) => setFormData({ ...formData, nickname: e.target.value })}
+                className="w-full px-3 py-2.5 sm:py-2 border border-gray-300 rounded-lg sm:rounded-md text-base sm:text-sm focus:ring-[#1479FF] focus:border-[#1479FF]"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">เบอร์ติดต่อ *</label>
               <input
                 type="tel"
@@ -312,6 +326,16 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
                 className={`w-full px-3 py-2.5 sm:py-2 border rounded-lg sm:rounded-md text-base sm:text-sm focus:ring-[#1479FF] focus:border-[#1479FF] ${errors.phone ? 'border-red-400' : 'border-gray-300'}`}
               />
               {errors.phone && <p className="text-xs text-red-500 mt-1">{errors.phone}</p>}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Social Media</label>
+              <input
+                type="text"
+                placeholder="Line, Facebook, Instagram..."
+                value={formData.socialMedia}
+                onChange={(e) => setFormData({ ...formData, socialMedia: e.target.value })}
+                className="w-full px-3 py-2.5 sm:py-2 border border-gray-300 rounded-lg sm:rounded-md text-base sm:text-sm focus:ring-[#1479FF] focus:border-[#1479FF]"
+              />
             </div>
           </div>
 
@@ -357,15 +381,6 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Line ID</label>
-              <input
-                type="text"
-                value={formData.lineId}
-                onChange={(e) => setFormData({ ...formData, lineId: e.target.value })}
-                className="w-full px-3 py-2.5 sm:py-2 border border-gray-300 rounded-lg sm:rounded-md text-base sm:text-sm focus:ring-[#1479FF] focus:border-[#1479FF]"
-              />
-            </div>
-            <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">แอดมิน *</label>
               <select
                 value={formData.admin}
@@ -380,22 +395,21 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
               </select>
               {errors.admin && <p className="text-xs text-red-500 mt-1">{errors.admin}</p>}
             </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">สาขา *</label>
-            <select
-              value={formData.branch}
-              onChange={(e) => {
-                setFormData({ ...formData, branch: e.target.value });
-                clearError('branch');
-              }}
-              className={`w-full px-3 py-2.5 sm:py-2 border rounded-lg sm:rounded-md text-base sm:text-sm focus:ring-[#1479FF] focus:border-[#1479FF] ${errors.branch ? 'border-red-400' : 'border-gray-300'}`}
-            >
-              {branches.length === 0 && <option value="0" disabled>เลือกสาขา</option>}
-              {branches.map(b => <option key={b._id} value={b.name}>{b.name}</option>)}
-            </select>
-            {errors.branch && <p className="text-xs text-red-500 mt-1">{errors.branch}</p>}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">สาขา *</label>
+              <select
+                value={formData.branch}
+                onChange={(e) => {
+                  setFormData({ ...formData, branch: e.target.value });
+                  clearError('branch');
+                }}
+                className={`w-full px-3 py-2.5 sm:py-2 border rounded-lg sm:rounded-md text-base sm:text-sm focus:ring-[#1479FF] focus:border-[#1479FF] ${errors.branch ? 'border-red-400' : 'border-gray-300'}`}
+              >
+                {branches.length === 0 && <option value="0" disabled>เลือกสาขา</option>}
+                {branches.map(b => <option key={b._id} value={b.name}>{b.name}</option>)}
+              </select>
+              {errors.branch && <p className="text-xs text-red-500 mt-1">{errors.branch}</p>}
+            </div>
           </div>
 
           <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-5 mt-6 border-t border-gray-100">
