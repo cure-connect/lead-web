@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { Search, Plus, Edit2, Trash2, X, Users, CalendarCheck, Clock, XCircle, Eye, UserCheck, Wallet, Calendar, ChevronRight } from "lucide-react";
+import { Search, Plus, Edit2, Trash2, X, Users, CalendarCheck, Clock, XCircle, Eye, UserCheck, Wallet, Calendar, ChevronRight, User } from "lucide-react";
 import { type Lead } from "../types";
 import Modal from "../components/UI/Modal";
 import LeadForm from "../components/UI/LeadForm";
@@ -376,7 +376,10 @@ const LeadsPage: React.FC = () => {
                     <th className="px-6 py-4 text-left font-semibold">โทร</th>
 
                     {activeTab === "notScheduled" && (
-                      <th className="px-6 py-4 text-left font-semibold">วันที่สร้าง</th>
+                      <>
+                        <th className="px-6 py-4 text-left font-semibold">วันที่สร้าง</th>
+                        <th className="px-6 py-4 text-left font-semibold">แอดมิน</th>
+                      </>
                     )}
 
                     {activeTab === "scheduled" && (
@@ -386,6 +389,7 @@ const LeadsPage: React.FC = () => {
                         <th className="px-6 py-4 text-center font-semibold">
                           ระยะเวลาก่อนวันนัด
                         </th>
+                        <th className="px-6 py-4 text-left font-semibold">แอดมิน</th>
                         <th className="px-6 py-4 text-center font-semibold">สถานะ</th>
                       </>
                     )}
@@ -395,6 +399,7 @@ const LeadsPage: React.FC = () => {
                         <th className="px-6 py-4 text-left font-semibold">วันที่มา</th>
                         <th className="px-6 py-4 text-left font-semibold">หัตถการที่สนใจ</th>
                         <th className="px-6 py-4 text-right font-semibold">ยอดชำระ</th>
+                        <th className="px-6 py-4 text-left font-semibold">แอดมิน</th>
                       </>
                     )}
 
@@ -405,7 +410,7 @@ const LeadsPage: React.FC = () => {
                 <tbody className="border-t">
                   {filteredLeads.length === 0 ? (
                     <tr>
-                      <td colSpan={activeTab === "scheduled" ? 7 : activeTab === "arrived" ? 6 : 4} className="px-6 py-16 text-center">
+                      <td colSpan={activeTab === "scheduled" ? 8 : activeTab === "arrived" ? 7 : 5} className="px-6 py-16 text-center">
                         <div className="flex flex-col items-center justify-center text-gray-400">
                           <Users className="w-12 h-12 mb-4 opacity-50" />
                           <p className="text-lg font-medium text-gray-500">ยังไม่มีข้อมูล</p>
@@ -428,9 +433,14 @@ const LeadsPage: React.FC = () => {
                         </td>
 
                         {activeTab === "notScheduled" && (
-                          <td className="px-6 py-4 text-gray-500">
-                            {lead.createdAtDisplay}
-                          </td>
+                          <>
+                            <td className="px-6 py-4 text-gray-500">
+                              {lead.createdAtDisplay}
+                            </td>
+                            <td className="px-6 py-4 text-gray-600">
+                              {lead.admin || "-"}
+                            </td>
+                          </>
                         )}
 
                         {activeTab === "scheduled" && (
@@ -465,6 +475,10 @@ const LeadsPage: React.FC = () => {
                                   })()}
                                 </span>
                               )}
+                            </td>
+
+                            <td className="px-6 py-4 text-gray-600">
+                              {lead.admin || "-"}
                             </td>
 
                             <td className="px-6 py-4 text-center">
@@ -505,6 +519,10 @@ const LeadsPage: React.FC = () => {
                               {lead.payments?.amount
                                 ? `${lead.payments.amount.toLocaleString()} บาท`
                                 : "-"}
+                            </td>
+
+                            <td className="px-6 py-4 text-gray-600">
+                              {lead.admin || "-"}
                             </td>
                           </>
                         )}
@@ -630,6 +648,11 @@ const LeadsPage: React.FC = () => {
                             )}
                           </>
                         )}
+
+                        <span className="flex items-center gap-1">
+                          <User className="w-3.5 h-3.5" />
+                          {lead.admin || "-"}
+                        </span>
                       </div>
 
                       {activeTab === "arrived" && lead.interest && lead.interest.length > 0 && (
@@ -1408,6 +1431,43 @@ const StatusModal = ({
 
             </div>
           )}
+
+          {/* {selectedStatus === "rescheduled" && (
+            <div className="space-y-4 border-t pt-6">
+              <h3 className="font-semibold text-gray-700">
+                กำหนดนัดใหม่
+              </h3>
+
+              <div className="flex gap-3">
+                <div className="flex-1 min-w-0">
+                  <label className="block text-sm font-medium mb-2">
+                    วันที่นัด
+                  </label>
+                  <input
+                    type="date"
+                    value={newAppointmentDate}
+                    onChange={(e) =>
+                      setNewAppointmentDate(e.target.value)
+                    }
+                    className="w-full px-3 py-2 border rounded-md text-sm"
+                  />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <label className="block text-sm font-medium mb-2">
+                    เวลานัด
+                  </label>
+                  <input
+                    type="time"
+                    value={newAppointmentTime}
+                    onChange={(e) =>
+                      setNewAppointmentTime(e.target.value)
+                    }
+                    className="w-full px-3 py-2 border rounded-md text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+          )} */}
 
           {selectedStatus === "rescheduled" && (
             <div className="space-y-5 mt-4">
