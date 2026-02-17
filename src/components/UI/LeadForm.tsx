@@ -5,7 +5,7 @@ import api from "@/api/api";
 
 interface LeadFormProps {
   lead: Lead | null;
-  onSave: (lead: Lead) => void;
+  onSave: (lead: Lead) => Promise<void> | void;
   onClose: () => void;
 }
 
@@ -81,6 +81,7 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
   const [slipPreview, setSlipPreview] = useState<string | null>(null);
   const [slipUploading, setSlipUploading] = useState(false);
   const [depositError, setDepositError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -128,11 +129,40 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
     fetchData();
   }, []);
 
+  const normalizePhone = (phone: string): string => {
+    return phone.replace(/[-\s]/g, '');
+  };
+
+  const validatePhone = (phone: string): string | null => {
+    const normalized = normalizePhone(phone);
+
+    if (!normalized) {
+      return "กรุณากรอกเบอร์ติดต่อ";
+    }
+
+    if (!/^\d+$/.test(normalized)) {
+      return "เบอร์โทรต้องเป็นตัวเลขเท่านั้น";
+    }
+
+    if (!normalized.startsWith('0')) {
+      return "เบอร์โทรต้องขึ้นต้นด้วย 0";
+    }
+
+    if (normalized.length < 9 || normalized.length > 10) {
+      return "เบอร์โทรต้องมี 9-10 หลัก";
+    }
+
+    return null;
+  };
+
   const validateStep1 = (): Record<string, string> => {
     const newErrors: Record<string, string> = {};
 
     if (!formData.name.trim()) newErrors.name = "กรุณากรอกชื่อนามสกุล";
-    if (!formData.phone.trim()) newErrors.phone = "กรุณากรอกเบอร์ติดต่อ";
+
+    const phoneError = validatePhone(formData.phone);
+    if (phoneError) newErrors.phone = phoneError;
+
     if (!formData.interest.name) newErrors.interest = "กรุณาเลือกความสนใจ";
     if (!formData.referralChannel) newErrors.referralChannel = "กรุณาเลือกช่องทางที่รู้จักคลินิก";
     if (!formData.admin) newErrors.admin = "กรุณาเลือกแอดมิน";
@@ -228,44 +258,55 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (isSaving) return;
+
     const error = validateStep2();
     if (error) {
       setDepositError(error);
       return;
     }
 
-    const now = new Date();
-    const buddhistYear = now.getFullYear() + 543;
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    const createdAt = lead?.createdAt || `${buddhistYear}-${month}-${day}`;
+    setIsSaving(true);
 
-    const backendStatus =
-      formData.status === 'ทำนัด' || formData.status === 'scheduled'
-        ? 'scheduled'
-        : 'pending';
+    try {
+      const now = new Date();
+      const buddhistYear = now.getFullYear() + 543;
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const createdAt = lead?.createdAt || `${buddhistYear}-${month}-${day}`;
 
-    const leadData: any = {
-      ...(lead || {}),
-      ...formData,
-      id: lead?.id || '',
-      status: backendStatus,
-      appointmentDate: backendStatus === 'scheduled' ? formData.appointmentDate : undefined,
-      appointmentTime: backendStatus === 'scheduled' ? formData.appointmentTime : undefined,
-      createdAt,
-    };
+      const backendStatus =
+        formData.status === 'ทำนัด' || formData.status === 'scheduled'
+          ? 'scheduled'
+          : 'pending';
 
-    if (depositEnabled && slipUrl) {
-      leadData.deposit = {
-        amount: Number(depositAmount),
-        slipUrl: slipUrl,
+      const leadData: any = {
+        ...(lead || {}),
+        ...formData,
+        phone: normalizePhone(formData.phone),
+        id: lead?.id || '',
+        status: backendStatus,
+        appointmentDate: backendStatus === 'scheduled' ? formData.appointmentDate : undefined,
+        appointmentTime: backendStatus === 'scheduled' ? formData.appointmentTime : undefined,
+        createdAt,
       };
-    } else if (lead?.deposit && !depositEnabled) {
-      leadData.deposit = null;
-    }
 
-    onSave(leadData as Lead);
+      if (depositEnabled && slipUrl) {
+        leadData.deposit = {
+          amount: Number(depositAmount),
+          slipUrl: slipUrl,
+        };
+      } else if (lead?.deposit && !depositEnabled) {
+        leadData.deposit = null;
+      }
+
+      await onSave(leadData as Lead);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -642,16 +683,18 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
             <div className="flex flex-col sm:flex-row gap-3 order-1 sm:order-2">
               <button
                 onClick={onClose}
-                className="order-2 sm:order-1 w-full sm:w-auto px-4 py-2.5 sm:py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors"
+                disabled={isSaving}
+                className="order-2 sm:order-1 w-full sm:w-auto px-4 py-2.5 sm:py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors disabled:opacity-50"
               >
                 ยกเลิก
               </button>
               <button
                 onClick={handleSubmit}
-                disabled={slipUploading}
-                className="order-1 sm:order-2 w-full sm:w-auto px-5 py-2.5 sm:py-2 bg-[#1479FF] text-white rounded-lg text-sm font-medium hover:bg-[#0066E6] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                disabled={slipUploading || isSaving}
+                className="order-1 sm:order-2 w-full sm:w-auto px-5 py-2.5 sm:py-2 bg-[#1479FF] text-white rounded-lg text-sm font-medium hover:bg-[#0066E6] disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
               >
-                บันทึก
+                {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+                {isSaving ? "กำลังบันทึก..." : "บันทึก"}
               </button>
             </div>
           </div>
