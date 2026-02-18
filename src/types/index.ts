@@ -6,7 +6,7 @@ export interface LeadInterest {
 }
 
 export interface LeadPayment {
-  method: string;
+  method: "cash" | "transfer" | "card" | "free";
   amount: number;
   serviceCharge?: {
     rate: number;
@@ -26,7 +26,8 @@ export interface LeadPayment {
 
 export interface LeadDeposit {
   amount: number;
-  slipUrl: string;
+  slipUrl?: string;
+  slipUrls?: string[];
 }
 
 export interface Lead {
@@ -61,6 +62,7 @@ export interface Lead {
   payments?: LeadPayment;
   deposit?: LeadDeposit;
   receiptUrl?: string;
+  receiptUrls?: string[];
   procedures?: Array<{
     name: string;
     price: string;

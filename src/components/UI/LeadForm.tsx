@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { type Lead } from '../../types/index';
-import { Upload, X, ImageIcon, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import api from "@/api/api";
+import MultiImageUpload from './MultiImageUpload';
 
 interface LeadFormProps {
   lead: Lead | null;
-  onSave: (lead: Lead) => void;
+  onSave: (lead: Lead) => Promise<void> | void;
   onClose: () => void;
 }
 
@@ -77,29 +78,19 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
 
   const [depositEnabled, setDepositEnabled] = useState(false);
   const [depositAmount, setDepositAmount] = useState('');
-  const [slipUrl, setSlipUrl] = useState<string | null>(null);
-  const [slipPreview, setSlipPreview] = useState<string | null>(null);
-  const [slipUploading, setSlipUploading] = useState(false);
+  const [slipUrls, setSlipUrls] = useState<string[]>([]);
   const [depositError, setDepositError] = useState('');
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (lead?.deposit) {
       setDepositEnabled(true);
       setDepositAmount(String(lead.deposit.amount || ''));
-      if (lead.deposit.slipUrl) {
-        setSlipUrl(lead.deposit.slipUrl);
-        const baseUrl = import.meta.env.VITE_API_URL || '';
-        const fullUrl = lead.deposit.slipUrl.startsWith('http')
-          ? lead.deposit.slipUrl
-          : `${baseUrl}${lead.deposit.slipUrl}`;
-        setSlipPreview(fullUrl);
+      if ((lead.deposit.slipUrls?.length ?? 0) > 0) {
+        setSlipUrls(lead.deposit.slipUrls!);
+      } else if (lead.deposit.slipUrl) {
+        setSlipUrls([lead.deposit.slipUrl]);
       }
-    } else {
-      setDepositEnabled(false);
-      setDepositAmount('');
-      setSlipUrl(null);
-      setSlipPreview(null);
     }
   }, [lead]);
 
@@ -128,11 +119,40 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
     fetchData();
   }, []);
 
+  const normalizePhone = (phone: string): string => {
+    return phone.replace(/[-\s]/g, '');
+  };
+
+  const validatePhone = (phone: string): string | null => {
+    const normalized = normalizePhone(phone);
+
+    if (!normalized) {
+      return "กรุณากรอกเบอร์ติดต่อ";
+    }
+
+    if (!/^\d+$/.test(normalized)) {
+      return "เบอร์โทรต้องเป็นตัวเลขเท่านั้น";
+    }
+
+    if (!normalized.startsWith('0')) {
+      return "เบอร์โทรต้องขึ้นต้นด้วย 0";
+    }
+
+    if (normalized.length < 9 || normalized.length > 10) {
+      return "เบอร์โทรต้องมี 9-10 หลัก";
+    }
+
+    return null;
+  };
+
   const validateStep1 = (): Record<string, string> => {
     const newErrors: Record<string, string> = {};
 
     if (!formData.name.trim()) newErrors.name = "กรุณากรอกชื่อนามสกุล";
-    if (!formData.phone.trim()) newErrors.phone = "กรุณากรอกเบอร์ติดต่อ";
+
+    const phoneError = validatePhone(formData.phone);
+    if (phoneError) newErrors.phone = phoneError;
+
     if (!formData.interest.name) newErrors.interest = "กรุณาเลือกความสนใจ";
     if (!formData.referralChannel) newErrors.referralChannel = "กรุณาเลือกช่องทางที่รู้จักคลินิก";
     if (!formData.admin) newErrors.admin = "กรุณาเลือกแอดมิน";
@@ -165,57 +185,11 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
       if (!depositAmount.trim() || Number(depositAmount) <= 0) {
         return "กรุณากรอกจำนวนเงินมัดจำ";
       }
-      if (!slipUrl) {
+      if (slipUrls.length === 0) {
         return "กรุณาอัปโหลดรูปสลิปการโอนเงิน";
       }
     }
     return null;
-  };
-
-  const handleSlipUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/heic'];
-    if (!allowedTypes.includes(file.type)) {
-      setDepositError('รองรับเฉพาะไฟล์รูปภาพ (JPG, PNG, WEBP)');
-      return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      setDepositError('ขนาดไฟล์ต้องไม่เกิน 5MB');
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onloadend = () => setSlipPreview(reader.result as string);
-    reader.readAsDataURL(file);
-
-    setSlipUploading(true);
-    setDepositError('');
-
-    try {
-      const formData = new FormData();
-      formData.append('slip', file);
-
-      const res = await api.post('/upload/slip', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-
-      setSlipUrl(res.data.data.url);
-    } catch (err: any) {
-      console.error('Upload slip failed', err);
-      setDepositError('อัปโหลดสลิปไม่สำเร็จ กรุณาลองใหม่');
-      setSlipPreview(null);
-    } finally {
-      setSlipUploading(false);
-    }
-  };
-
-  const removeSlip = () => {
-    setSlipUrl(null);
-    setSlipPreview(null);
-    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleDepositToggle = () => {
@@ -223,49 +197,60 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
     setDepositEnabled(next);
     if (!next) {
       setDepositAmount('');
-      removeSlip();
+      setSlipUrls([]);
       setDepositError('');
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (isSaving) return;
+
     const error = validateStep2();
     if (error) {
       setDepositError(error);
       return;
     }
 
-    const now = new Date();
-    const buddhistYear = now.getFullYear() + 543;
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    const createdAt = lead?.createdAt || `${buddhistYear}-${month}-${day}`;
+    setIsSaving(true);
 
-    const backendStatus =
-      formData.status === 'ทำนัด' || formData.status === 'scheduled'
-        ? 'scheduled'
-        : 'pending';
+    try {
+      const now = new Date();
+      const buddhistYear = now.getFullYear() + 543;
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const createdAt = lead?.createdAt || `${buddhistYear}-${month}-${day}`;
 
-    const leadData: any = {
-      ...(lead || {}),
-      ...formData,
-      id: lead?.id || '',
-      status: backendStatus,
-      appointmentDate: backendStatus === 'scheduled' ? formData.appointmentDate : undefined,
-      appointmentTime: backendStatus === 'scheduled' ? formData.appointmentTime : undefined,
-      createdAt,
-    };
+      const backendStatus =
+        formData.status === 'ทำนัด' || formData.status === 'scheduled'
+          ? 'scheduled'
+          : 'pending';
 
-    if (depositEnabled && slipUrl) {
-      leadData.deposit = {
-        amount: Number(depositAmount),
-        slipUrl: slipUrl,
+      const leadData: any = {
+        ...(lead || {}),
+        ...formData,
+        phone: normalizePhone(formData.phone), // ลบ "-" ออก
+        id: lead?.id || '',
+        status: backendStatus,
+        appointmentDate: backendStatus === 'scheduled' ? formData.appointmentDate : undefined,
+        appointmentTime: backendStatus === 'scheduled' ? formData.appointmentTime : undefined,
+        createdAt,
       };
-    } else if (lead?.deposit && !depositEnabled) {
-      leadData.deposit = null;
-    }
 
-    onSave(leadData as Lead);
+      if (depositEnabled && slipUrls.length > 0) {
+        leadData.deposit = {
+          amount: Number(depositAmount),
+          slipUrls: slipUrls,
+        };
+      } else if (lead?.deposit && !depositEnabled) {
+        leadData.deposit = null;
+      }
+
+      await onSave(leadData as Lead);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -535,85 +520,18 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
-                    สลิปการโอนเงิน *
-                  </label>
-
-                  {!slipPreview ? (
-                    <label
-                      className={`flex flex-col items-center justify-center w-full h-36 sm:h-40 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${depositError && !slipUrl
-                        ? 'border-red-400 bg-red-50 hover:bg-red-100'
-                        : 'border-gray-300 bg-gray-50 hover:bg-gray-100'
-                        }`}
-                    >
-                      <div className="flex flex-col items-center justify-center py-4">
-                        <Upload className={`w-8 h-8 mb-2 ${depositError && !slipUrl ? 'text-red-400' : 'text-gray-400'}`} />
-                        <p className="text-sm text-gray-500 text-center px-4">
-                          <span className="font-medium text-[#1479FF]">คลิกเพื่ออัปโหลด</span>
-                          <span className="hidden sm:inline"> หรือลากไฟล์มาวาง</span>
-                        </p>
-                        <p className="text-xs text-gray-400 mt-1">JPG, PNG, WEBP (สูงสุด 5MB)</p>
-                      </div>
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp,image/heic"
-                        onChange={handleSlipUpload}
-                        className="hidden"
-                      />
-                    </label>
-                  ) : (
-                    <div className="relative group">
-                      <div className="relative w-full h-44 sm:h-48 bg-gray-100 rounded-xl overflow-hidden border border-gray-200">
-                        <img
-                          src={slipPreview}
-                          alt="สลิปการโอน"
-                          className="w-full h-full object-contain"
-                        />
-
-                        {slipUploading && (
-                          <div className="absolute inset-0 bg-white/70 flex flex-col items-center justify-center">
-                            <Loader2 className="w-8 h-8 text-[#1479FF] animate-spin" />
-                            <span className="text-sm text-gray-600 mt-2">กำลังอัปโหลด...</span>
-                          </div>
-                        )}
-
-                        {!slipUploading && (
-                          <div className="absolute inset-0 bg-black/0 sm:group-hover:bg-black/30 transition-colors flex items-center justify-center">
-                            <button
-                              type="button"
-                              onClick={removeSlip}
-                              className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity bg-red-500 hover:bg-red-600 text-white rounded-full p-2 shadow-lg"
-                            >
-                              <X className="w-5 h-5" />
-                            </button>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="flex items-center justify-between mt-2 px-1">
-                        <div className="flex items-center gap-2 text-sm text-gray-500">
-                          <ImageIcon className="w-4 h-4" />
-                          {slipUploading ? (
-                            <span className="text-[#1479FF]">กำลังอัปโหลด...</span>
-                          ) : slipUrl ? (
-                            <span className="text-green-600">อัปโหลดสำเร็จ ✓</span>
-                          ) : null}
-                        </div>
-                        {!slipUploading && (
-                          <button
-                            type="button"
-                            onClick={removeSlip}
-                            className="text-xs text-red-500 hover:text-red-700 font-medium"
-                          >
-                            ลบ
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
+                <MultiImageUpload
+                  label="สลิปการโอนเงิน"
+                  required
+                  urls={slipUrls}
+                  onUrlsChange={setSlipUrls}
+                  uploadEndpoint="/upload/slip"
+                  fieldName="slip"
+                  maxFiles={5}
+                  showIcon
+                  iconBgColor="bg-blue-100"
+                  iconColor="text-blue-600"
+                />
               </div>
             )}
 
@@ -642,16 +560,18 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
             <div className="flex flex-col sm:flex-row gap-3 order-1 sm:order-2">
               <button
                 onClick={onClose}
-                className="order-2 sm:order-1 w-full sm:w-auto px-4 py-2.5 sm:py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors"
+                disabled={isSaving}
+                className="order-2 sm:order-1 w-full sm:w-auto px-4 py-2.5 sm:py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors disabled:opacity-50"
               >
                 ยกเลิก
               </button>
               <button
                 onClick={handleSubmit}
-                disabled={slipUploading}
-                className="order-1 sm:order-2 w-full sm:w-auto px-5 py-2.5 sm:py-2 bg-[#1479FF] text-white rounded-lg text-sm font-medium hover:bg-[#0066E6] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                disabled={isSaving}
+                className="order-1 sm:order-2 w-full sm:w-auto px-5 py-2.5 sm:py-2 bg-[#1479FF] text-white rounded-lg text-sm font-medium hover:bg-[#0066E6] disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
               >
-                บันทึก
+                {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+                {isSaving ? "กำลังบันทึก..." : "บันทึก"}
               </button>
             </div>
           </div>

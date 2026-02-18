@@ -1,8 +1,10 @@
-import React, { useState, useMemo, useEffect, useRef } from "react";
-import { Search, Plus, Edit2, Trash2, X, Users, CalendarCheck, Clock, XCircle, Eye, UserCheck, Wallet, Calendar, ChevronRight, User, Upload, ImageIcon, Loader2 } from "lucide-react";
+import React, { useState, useMemo, useEffect } from "react";
+import { Search, Plus, Edit2, Trash2, X, Users, CalendarCheck, Clock, XCircle, Eye, UserCheck, Wallet, Calendar, ChevronRight, User, Loader2 } from "lucide-react";
 import { type Lead } from "../types";
 import Modal from "../components/UI/Modal";
 import LeadForm from "../components/UI/LeadForm";
+import { ToastContainer, useToast } from "../components/Toast";
+import MultiImageUpload from "../components/UI/MultiImageUpload";
 import api from "@/api/api";
 
 const statusLabel: Record<string, string> = {
@@ -61,8 +63,11 @@ const LeadsPage: React.FC = () => {
 
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [leadToDelete, setLeadToDelete] = useState<Lead | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [statusModalLead, setStatusModalLead] = useState<Lead | null>(null);
   const [viewingLead, setViewingLead] = useState<Lead | null>(null);
+
+  const { toasts, toast, removeToast } = useToast();
 
   const fetchLeads = async (year: string) => {
     try {
@@ -95,8 +100,12 @@ const LeadsPage: React.FC = () => {
           note: item.note || "",
           payments: item.payments,
           procedures: Array.isArray(item.procedures) ? item.procedures : [],
-          deposit: item.deposit,
+          deposit: item.deposit ? {
+            ...item.deposit,
+            slipUrls: item.deposit.slipUrls || (item.deposit.slipUrl ? [item.deposit.slipUrl] : []),
+          } : undefined,
           receiptUrl: item.receiptUrl || "",
+          receiptUrls: item.receiptUrls || (item.receiptUrl ? [item.receiptUrl] : []),
         };
       });
 
@@ -225,15 +234,17 @@ const LeadsPage: React.FC = () => {
         };
 
         await api.post("/createlead", payload);
+        toast.success("เพิ่ม Lead สำเร็จ");
       } else {
         await api.patch(`/${lead.id}`, payload);
+        toast.success("บันทึกข้อมูลสำเร็จ");
       }
 
       await fetchLeads(selectedYear);
       setIsModalOpen(false);
       setEditingLead(null);
     } catch (error: any) {
-      alert(error.message);
+      toast.error(error.message || "เกิดข้อผิดพลาด");
     }
   };
 
@@ -243,14 +254,18 @@ const LeadsPage: React.FC = () => {
   };
 
   const confirmDelete = async () => {
-    if (!leadToDelete) return;
+    if (!leadToDelete || isDeleting) return;
 
+    setIsDeleting(true);
     try {
       await api.delete(`/${leadToDelete.id}`);
       await fetchLeads(selectedYear);
+      toast.success("ลบข้อมูลสำเร็จ");
     } catch (err) {
       console.error("Delete lead failed", err);
+      toast.error("ลบข้อมูลไม่สำเร็จ");
     } finally {
+      setIsDeleting(false);
       setIsDeleteModalOpen(false);
       setLeadToDelete(null);
     }
@@ -262,6 +277,7 @@ const LeadsPage: React.FC = () => {
 
   return (
     <>
+      <ToastContainer toasts={toasts} onClose={removeToast} />
       <div className="min-h-screen bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-2 pb-28 sm:pb-8 sm:pt-8">
           <p className="hidden sm:block text-gray-600 mb-6">รายชื่อลูกค้าที่ลงข้อมูลและการติดตาม</p>
@@ -362,17 +378,17 @@ const LeadsPage: React.FC = () => {
                 <input
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="ค้นหาข้อมูลคนไข้"
+                  placeholder="ค้นหา Lead..."
                   className="w-full py-2 outline-none text-sm"
                 />
               </div>
 
               <button
                 onClick={() => { setEditingLead(null); setIsModalOpen(true); }}
-                className="flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 bg-[#1479FF] text-white rounded-md whitespace-nowrap text-sm font-medium"
+                className="flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 bg-indigo-600 text-white rounded-md whitespace-nowrap text-sm font-medium"
               >
                 <Plus className="w-5 h-5" />
-                เพิ่ม
+                เพิ่ม Lead
               </button>
             </div>
 
@@ -380,11 +396,11 @@ const LeadsPage: React.FC = () => {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 text-gray-500 uppercase tracking-wider">
                   <tr>
-                    <th className="px-6 py-4 text-left font-semibold">ชื่อ</th>
-                    <th className="px-6 py-4 text-left font-semibold">โทร</th>
+                    <th className="px-6 py-4 text-left font-semibold">คนไข้</th>
 
                     {activeTab === "notScheduled" && (
                       <>
+                        <th className="px-6 py-4 text-left font-semibold">หัตถการที่สนใจ</th>
                         <th className="px-6 py-4 text-left font-semibold">วันที่สร้าง</th>
                         <th className="px-6 py-4 text-left font-semibold">แอดมิน</th>
                       </>
@@ -394,6 +410,7 @@ const LeadsPage: React.FC = () => {
                       <>
                         <th className="px-6 py-4 text-left font-semibold">วันที่สร้าง</th>
                         <th className="px-6 py-4 text-left font-semibold">วันที่นัด</th>
+                        <th className="px-6 py-4 text-right font-semibold">มัดจำ</th>
                         <th className="px-6 py-4 text-center font-semibold">
                           ระยะเวลาก่อนวันนัด
                         </th>
@@ -408,6 +425,7 @@ const LeadsPage: React.FC = () => {
                         <th className="px-6 py-4 text-left font-semibold">หัตถการที่สนใจ</th>
                         <th className="px-6 py-4 text-right font-semibold">ยอดชำระ</th>
                         <th className="px-6 py-4 text-left font-semibold">แอดมิน</th>
+                        <th className="px-6 py-4 text-center font-semibold">สถานะ</th>
                       </>
                     )}
 
@@ -432,16 +450,20 @@ const LeadsPage: React.FC = () => {
                         key={lead.id}
                         className="hover:bg-gray-50 transition-colors"
                       >
-                        <td className="px-6 py-4 font-medium text-gray-900">
-                          {lead.name}{lead.nickname && <span className="text-gray-500 font-normal"> ({lead.nickname})</span>}
-                        </td>
-
-                        <td className="px-6 py-4 text-gray-600">
-                          {lead.phone}
+                        <td className="px-6 py-4">
+                          <div className="font-medium text-gray-900">
+                            {lead.name}{lead.nickname && <span className="text-gray-500 font-normal"> ({lead.nickname})</span>}
+                          </div>
+                          <div className="text-sm text-gray-500">{lead.phone}</div>
                         </td>
 
                         {activeTab === "notScheduled" && (
                           <>
+                            <td className="px-6 py-4 text-gray-600">
+                              {lead.interest && lead.interest.length > 0
+                                ? lead.interest.map((i: any) => i.name || i).join(", ")
+                                : "-"}
+                            </td>
                             <td className="px-6 py-4 text-gray-500">
                               {lead.createdAtDisplay}
                             </td>
@@ -459,6 +481,16 @@ const LeadsPage: React.FC = () => {
 
                             <td className="px-6 py-4 text-gray-700">
                               {lead.appointmentDateDisplay}
+                            </td>
+
+                            <td className="px-6 py-4 text-right">
+                              {lead.deposit?.amount ? (
+                                <span className="font-medium text-blue-600">
+                                  {lead.deposit.amount.toLocaleString()} บาท
+                                </span>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
                             </td>
 
                             <td className="px-6 py-4 text-center">
@@ -531,6 +563,15 @@ const LeadsPage: React.FC = () => {
 
                             <td className="px-6 py-4 text-gray-600">
                               {lead.admin || "-"}
+                            </td>
+
+                            <td className="px-6 py-4 text-center">
+                              <button
+                                onClick={() => openStatusModal(lead)}
+                                className="inline-flex items-center justify-center px-4 py-2 text-xs font-semibold rounded-md transition-all bg-green-100 text-green-700 hover:bg-green-200"
+                              >
+                                {statusLabel[lead.status]}
+                              </button>
                             </td>
                           </>
                         )}
@@ -614,6 +655,16 @@ const LeadsPage: React.FC = () => {
                             )}
                           </button>
                         )}
+
+                        {activeTab === "arrived" && (
+                          <button
+                            onClick={() => openStatusModal(lead)}
+                            className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-full transition-all ml-2 shrink-0 bg-green-100 text-green-700 active:scale-95"
+                          >
+                            {statusLabel[lead.status]}
+                            <ChevronRight className="w-3 h-3" />
+                          </button>
+                        )}
                       </div>
 
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500 mb-3">
@@ -639,6 +690,12 @@ const LeadsPage: React.FC = () => {
                                   if (days > 0) return <span className="text-green-600 font-medium">อีก {days} วัน</span>;
                                   return <span className="text-red-600 font-medium">เลยมา {Math.abs(days)} วัน</span>;
                                 })()}
+                              </span>
+                            )}
+                            {lead.deposit?.amount && (
+                              <span className="flex items-center gap-1 text-blue-600 font-medium">
+                                <Wallet className="w-3.5 h-3.5" />
+                                มัดจำ: {lead.deposit.amount.toLocaleString()} บาท
                               </span>
                             )}
                           </>
@@ -733,6 +790,8 @@ const LeadsPage: React.FC = () => {
             await fetchLeads(selectedYear);
             setStatusModalLead(null);
           }}
+          onSuccess={(message) => toast.success(message)}
+          onError={(message) => toast.error(message)}
         />
       )}
 
@@ -765,15 +824,18 @@ const LeadsPage: React.FC = () => {
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => { setIsDeleteModalOpen(false); setLeadToDelete(null); }}
-                className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50"
+                disabled={isDeleting}
+                className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50 disabled:opacity-50"
               >
                 ยกเลิก
               </button>
               <button
                 onClick={confirmDelete}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700"
+                disabled={isDeleting}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 disabled:opacity-50 flex items-center gap-2"
               >
-                ลบ
+                {isDeleting && <Loader2 className="w-4 h-4 animate-spin" />}
+                {isDeleting ? "กำลังลบ..." : "ลบ"}
               </button>
             </div>
           </div>
@@ -813,10 +875,14 @@ const StatusModal = ({
   lead,
   onClose,
   onSave,
+  onSuccess,
+  onError,
 }: {
   lead: Lead;
   onClose: () => void;
   onSave: (lead: Lead) => void;
+  onSuccess?: (message: string) => void;
+  onError?: (message: string) => void;
 }) => {
   const [selectedStatus, setSelectedStatus] = useState<string>("");
   const [newAppointmentDate, setNewAppointmentDate] = useState("");
@@ -841,41 +907,42 @@ const StatusModal = ({
   const [patientName, setPatientName] = useState(lead.name || "");
   const [nickname, setNickname] = useState(lead.nickname || "");
 
-  const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
-  const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
-  const [receiptUploading, setReceiptUploading] = useState(false);
-  const receiptInputRef = useRef<HTMLInputElement>(null);
+  const [receiptUrls, setReceiptUrls] = useState<string[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const handleReceiptUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  useEffect(() => {
+    if (lead.status === "arrived") {
+      setSelectedStatus("arrived");
 
-    const reader = new FileReader();
-    reader.onload = () => setReceiptPreview(reader.result as string);
-    reader.readAsDataURL(file);
+      if (lead.procedures && lead.procedures.length > 0) {
+        setProcedures(
+          lead.procedures.map((p: any) => ({
+            name: p.name || "",
+            price: String(p.price || 0),
+            commissionRate: p.commissionRate || 0,
+          }))
+        );
+      }
 
-    setReceiptUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append('slip', file);
-      const res = await api.post('/upload/slip', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      setReceiptUrl(res.data.data.url);
-    } catch (err) {
-      console.error('Upload receipt failed', err);
-      setReceiptPreview(null);
-    } finally {
-      setReceiptUploading(false);
+      if (lead.payments?.method) {
+        setPaymentMethod(lead.payments.method);
+      }
+
+      if (lead.payments?.serviceCharge?.rate) {
+        setServiceChargeRate(lead.payments.serviceCharge.rate);
+      }
+
+      if (lead.payments?.commission && lead.payments.commission.totalAmount > 0) {
+        setCommissionEnabled(true);
+      }
+
+      if ((lead.receiptUrls?.length ?? 0) > 0) {
+        setReceiptUrls(lead.receiptUrls!);
+      } else if (lead.receiptUrl) {
+        setReceiptUrls([lead.receiptUrl]);
+      }
     }
-  };
-
-  const removeReceipt = () => {
-    setReceiptUrl(null);
-    setReceiptPreview(null);
-    if (receiptInputRef.current) receiptInputRef.current.value = '';
-  };
-
+  }, [lead]);
 
   const totalAmount = procedures.reduce(
     (sum, p) => sum + (parseFloat(p.price) || 0),
@@ -931,27 +998,44 @@ const StatusModal = ({
   };
 
   const handleSave = async () => {
+    if (isSaving) return;
+
     try {
       if (!selectedStatus) return;
 
       setValidationError("");
 
-      const validProcedures = procedures.filter(p => p.name && p.price);
+      const validProcedures = procedures.filter(p => p.name && p.name.trim());
 
       if (selectedStatus === "arrived") {
-        if (validProcedures.length === 0 || !validProcedures.some(p => p.name.trim())) {
+        if (validProcedures.length === 0) {
           setValidationError("กรุณากรอกข้อมูลหัตถการอย่างน้อย 1 รายการ");
           return;
         }
-        if (!paymentMethod) {
-          setValidationError("กรุณาเลือกช่องทางการชำระเงิน");
+
+        if (validProcedures.some(p => parseFloat(p.price) < 0)) {
+          setValidationError("จำนวนเงินต้องไม่ติดลบ");
           return;
         }
-        if (!receiptUrl) {
-          setValidationError("กรุณาอัปโหลดรูปใบเสร็จ");
-          return;
+
+        const calcTotalAmount = validProcedures.reduce(
+          (sum, p) => sum + (parseFloat(p.price) || 0),
+          0
+        );
+
+        if (calcTotalAmount > 0) {
+          if (!paymentMethod) {
+            setValidationError("กรุณาเลือกช่องทางการชำระเงิน");
+            return;
+          }
+          if (receiptUrls.length === 0) {
+            setValidationError("กรุณาอัปโหลดรูปใบเสร็จ");
+            return;
+          }
         }
       }
+
+      setIsSaving(true);
 
       const totalAmount = validProcedures.reduce(
         (sum, p) => sum + (parseFloat(p.price) || 0),
@@ -959,48 +1043,56 @@ const StatusModal = ({
       );
 
       let payments: any = undefined;
-      if (paymentMethod && totalAmount > 0) {
-        const scRate = paymentMethod === "card" ? serviceChargeRate : 0;
-        const scAmount = paymentMethod === "card"
-          ? Math.round((totalAmount * scRate) / 100 * 100) / 100
-          : 0;
 
-        payments = {
-          method: paymentMethod,
-          amount: totalAmount,
-        };
-
-        if (paymentMethod === "card") {
-          payments.serviceCharge = {
-            rate: scRate,
-            amount: scAmount,
-            netAmount: totalAmount - scAmount,
+      if (selectedStatus === "arrived") {
+        if (totalAmount === 0) {
+          payments = {
+            method: "free",
+            amount: 0,
           };
-        }
+        } else if (paymentMethod && totalAmount > 0) {
+          const scRate = paymentMethod === "card" ? serviceChargeRate : 0;
+          const scAmount = paymentMethod === "card"
+            ? Math.round((totalAmount * scRate) / 100 * 100) / 100
+            : 0;
 
-        if (commissionEnabled) {
-          const details = validProcedures
-            .filter((p) => p.commissionRate > 0)
-            .map((p) => {
-              const price = parseFloat(p.price) || 0;
-              const base =
-                paymentMethod === "card"
-                  ? price - Math.round((price * scRate) / 100 * 100) / 100
-                  : price;
-              const commAmt = Math.round((base * p.commissionRate) / 100 * 100) / 100;
-              return {
-                procedureName: p.name,
-                baseAmount: base,
-                rate: p.commissionRate,
-                amount: commAmt,
-              };
-            });
+          payments = {
+            method: paymentMethod,
+            amount: totalAmount,
+          };
 
-          if (details.length > 0) {
-            payments.commission = {
-              totalAmount: details.reduce((s, d) => s + d.amount, 0),
-              details,
+          if (paymentMethod === "card") {
+            payments.serviceCharge = {
+              rate: scRate,
+              amount: scAmount,
+              netAmount: totalAmount - scAmount,
             };
+          }
+
+          if (commissionEnabled) {
+            const details = validProcedures
+              .filter((p) => p.commissionRate > 0)
+              .map((p) => {
+                const price = parseFloat(p.price) || 0;
+                const base =
+                  paymentMethod === "card"
+                    ? price - Math.round((price * scRate) / 100 * 100) / 100
+                    : price;
+                const commAmt = Math.round((base * p.commissionRate) / 100 * 100) / 100;
+                return {
+                  procedureName: p.name,
+                  baseAmount: base,
+                  rate: p.commissionRate,
+                  amount: commAmt,
+                };
+              });
+
+            if (details.length > 0) {
+              payments.commission = {
+                totalAmount: details.reduce((s, d) => s + d.amount, 0),
+                details,
+              };
+            }
           }
         }
       }
@@ -1028,8 +1120,8 @@ const StatusModal = ({
           tel: lead.phone,
           socialMedia: lead.socialMedia || undefined,
         };
-        if (receiptUrl) {
-          payload.receiptUrl = receiptUrl;
+        if (receiptUrls.length > 0) {
+          payload.receiptUrls = receiptUrls;
         }
       }
 
@@ -1040,7 +1132,7 @@ const StatusModal = ({
             : new Date().toISOString();
       } else if (selectedStatus === "rescheduled") {
         if (!newAppointmentDate || !newAppointmentTime) {
-          alert("กรุณาเลือกวันและเวลานัดใหม่");
+          setValidationError("กรุณาเลือกวันและเวลานัดใหม่");
           return;
         }
         payload.appointments.date = `${newAppointmentDate}T${newAppointmentTime}:00+07:00`;
@@ -1096,14 +1188,23 @@ const StatusModal = ({
         ...(selectedStatus === "arrived" ? {
           name: patientName || lead.name,
           nickname: nickname || undefined,
-          receiptUrl: receiptUrl || undefined,
+          receiptUrls: receiptUrls.length > 0 ? receiptUrls : undefined,
         } : {}),
       });
+
+      const statusLabels: Record<string, string> = {
+        arrived: "อัปเดตสถานะมาตามนัดสำเร็จ",
+        rescheduled: "เลื่อนนัดสำเร็จ",
+        cancelled: "ยกเลิกนัดสำเร็จ",
+      };
+      onSuccess?.(statusLabels[selectedStatus] || "อัปเดตสถานะสำเร็จ");
 
       onClose();
     } catch (err) {
       console.error(err);
-      alert("อัปเดตสถานะไม่สำเร็จ");
+      onError?.("อัปเดตสถานะไม่สำเร็จ");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -1254,9 +1355,16 @@ const StatusModal = ({
                       <label className="block text-sm font-medium text-gray-700 mb-1">ราคา (บาท)</label>
                       <input
                         type="number"
+                        min="0"
                         placeholder="0"
                         value={procedure.price ?? ""}
-                        onChange={(e) => updateProcedure(index, "price", e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          // ป้องกันค่าติดลบ
+                          if (val === "" || parseFloat(val) >= 0) {
+                            updateProcedure(index, "price", val);
+                          }
+                        }}
                         className="w-full px-3 py-2 border border-gray-200 rounded-md bg-white text-right"
                       />
                     </div>
@@ -1376,24 +1484,30 @@ const StatusModal = ({
                 </span>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium mb-2">
-                  ช่องทางชำระเงิน
-                </label>
-                <select
-                  value={paymentMethod}
-                  onChange={(e) => {
-                    setPaymentMethod(e.target.value);
-                    setValidationError("");
-                  }}
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg"
-                >
-                  <option value="">เลือกช่องทางชำระเงิน</option>
-                  <option value="cash">เงินสด</option>
-                  <option value="transfer">โอนเงิน</option>
-                  <option value="card">บัตรเครดิต</option>
-                </select>
-              </div>
+              {totalAmount === 0 ? (
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center">
+                  <p className="text-blue-700 font-medium">ปรึกษาฟรี - ไม่มีค่าใช้จ่าย</p>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    ช่องทางชำระเงิน <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={paymentMethod}
+                    onChange={(e) => {
+                      setPaymentMethod(e.target.value);
+                      setValidationError("");
+                    }}
+                    className="w-full px-4 py-2.5 border border-gray-200 rounded-lg"
+                  >
+                    <option value="">เลือกช่องทางชำระเงิน</option>
+                    <option value="cash">เงินสด</option>
+                    <option value="transfer">โอนเงิน</option>
+                    <option value="card">บัตรเครดิต</option>
+                  </select>
+                </div>
+              )}
 
               {paymentMethod === "card" && totalAmount > 0 && (
                 <div className="space-y-4 bg-amber-50 border border-amber-200 rounded-xl p-4">
@@ -1471,20 +1585,13 @@ const StatusModal = ({
                     </div>
 
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">หักเงินมัดจำ</span>
+                      <span className="text-gray-600">เงินมัดจำ</span>
                       <span className={`font-medium ${(lead.deposit?.amount || 0) > 0 ? 'text-blue-600' : 'text-gray-500'}`}>
-                        {(lead.deposit?.amount || 0) > 0 ? `-${(lead.deposit?.amount || 0).toLocaleString()}` : '0'} บาท
+                        {(lead.deposit?.amount || 0).toLocaleString()} บาท
                       </span>
                     </div>
 
-                    <div className="border-t border-slate-300 pt-3 mt-3 space-y-2">
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm font-semibold text-gray-800">ยอดที่ลูกค้าต้องชำระเพิ่ม</span>
-                        <span className="text-xl font-bold text-indigo-600">
-                          {Math.max(0, totalAmount - (lead.deposit?.amount || 0)).toLocaleString()} บาท
-                        </span>
-                      </div>
-
+                    <div className="border-t border-slate-300 pt-3 mt-3">
                       <div className="flex justify-between items-center bg-green-50 -mx-5 px-5 py-3 rounded-b-xl -mb-5 border-t border-green-200">
                         <span className="text-sm font-semibold text-gray-800">ยอดสุทธิที่คลินิกได้รับ</span>
                         <span className="text-xl font-bold text-green-600">
@@ -1496,53 +1603,20 @@ const StatusModal = ({
                 </div>
               )}
 
-              <div className="border border-gray-200 rounded-lg p-4 space-y-4">
-                <div className="flex items-center gap-2">
-                  <div className="p-2 bg-amber-100 rounded-lg">
-                    <ImageIcon className="w-5 h-5 text-amber-600" />
-                  </div>
-                  <span className="text-sm font-semibold text-gray-700">ใบเสร็จ / หลักฐานการรับชำระ <span className="text-red-500">*</span></span>
-                </div>
-
-                {!receiptPreview ? (
-                  <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-xl cursor-pointer bg-gray-50 hover:bg-gray-100 transition-colors">
-                    <div className="flex flex-col items-center justify-center py-4">
-                      <Upload className="w-8 h-8 text-gray-400 mb-2" />
-                      <p className="text-sm text-gray-500">คลิกเพื่ออัปโหลดรูปใบเสร็จ</p>
-                      <p className="text-xs text-gray-400 mt-1">PNG, JPG ไม่เกิน 5MB</p>
-                    </div>
-                    <input
-                      ref={receiptInputRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={handleReceiptUpload}
-                      className="hidden"
-                    />
-                  </label>
-                ) : (
-                  <div className="relative">
-                    <img
-                      src={receiptPreview}
-                      alt="Receipt preview"
-                      className="w-full h-48 object-contain rounded-lg border border-gray-200 bg-gray-50"
-                    />
-                    {receiptUploading && (
-                      <div className="absolute inset-0 bg-white/80 flex items-center justify-center rounded-lg">
-                        <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
-                      </div>
-                    )}
-                    {!receiptUploading && (
-                      <button
-                        type="button"
-                        onClick={removeReceipt}
-                        className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
+              {totalAmount > 0 && (
+                <MultiImageUpload
+                  label="ใบเสร็จ / หลักฐานการรับชำระ"
+                  required
+                  urls={receiptUrls}
+                  onUrlsChange={setReceiptUrls}
+                  uploadEndpoint="/upload/slip"
+                  fieldName="slip"
+                  maxFiles={5}
+                  showIcon
+                  iconBgColor="bg-amber-100"
+                  iconColor="text-amber-600"
+                />
+              )}
 
               <div className="border border-gray-200 rounded-lg p-4 space-y-4">
                 <div className="flex items-center justify-between">
@@ -1579,7 +1653,14 @@ const StatusModal = ({
                           type="date"
                           value={nextAppointmentDate}
                           onChange={(e) => setNextAppointmentDate(e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                          className={`
+                                    block w-full px-4 py-3.5
+                                    border border-gray-300 rounded-lg
+                                    text-base
+                                    focus:ring-2 focus:ring-[#1479FF] focus:border-[#1479FF] focus:outline-none
+                                    min-h-[52px]
+                                    appearance-none
+                                  `}
                         />
                       </div>
                       <div className="flex-1 min-w-0">
@@ -1588,7 +1669,14 @@ const StatusModal = ({
                           type="time"
                           value={nextAppointmentTime}
                           onChange={(e) => setNextAppointmentTime(e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                          className={`
+                                    block w-full px-4 py-3.5
+                                    border border-gray-300 rounded-lg
+                                    text-base
+                                    focus:ring-2 focus:ring-[#1479FF] focus:border-[#1479FF] focus:outline-none
+                                    min-h-[52px]
+                                    appearance-none
+                                  `}
                         />
                       </div>
                     </div>
@@ -1665,16 +1753,18 @@ const StatusModal = ({
           <div className="flex justify-end gap-3">
             <button
               onClick={onClose}
-              className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors"
+              disabled={isSaving}
+              className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors disabled:opacity-50"
             >
               ยกเลิก
             </button>
             <button
               onClick={handleSave}
-              disabled={!selectedStatus}
-              className="px-5 py-2 bg-[#1479FF] text-white rounded-lg text-sm font-medium hover:bg-[#0066E6] disabled:bg-gray-300 transition-colors"
+              disabled={!selectedStatus || isSaving}
+              className="px-5 py-2 bg-[#1479FF] text-white rounded-lg text-sm font-medium hover:bg-[#0066E6] disabled:bg-gray-300 transition-colors flex items-center gap-2"
             >
-              บันทึก
+              {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+              {isSaving ? "กำลังบันทึก..." : "บันทึก"}
             </button>
           </div>
         </div>
@@ -1702,6 +1792,7 @@ const ViewLeadModal = ({
     cash: "เงินสด",
     transfer: "โอนเงิน",
     card: "บัตรเครดิต",
+    free: "ปรึกษาฟรี",
   };
 
   const statusConfig: Record<string, { bg: string; text: string; label: string }> = {
@@ -1777,7 +1868,7 @@ const ViewLeadModal = ({
             <div className="bg-emerald-50 rounded-xl p-4 space-y-3">
               <h3 className="text-sm font-semibold text-emerald-700 flex items-center gap-2">
                 <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
-                หัตถการที่ทำ
+                หัตถการที่สนใจ
               </h3>
               <div className="space-y-2">
                 {proceduresDisplay.map((p, i) => (
@@ -1800,30 +1891,29 @@ const ViewLeadModal = ({
                 <span className="text-gray-600">จำนวนเงินมัดจำ</span>
                 <span className="font-bold text-blue-600">{lead.deposit.amount?.toLocaleString()} บาท</span>
               </div>
-              {lead.deposit.slipUrl && (
+              {((lead.deposit.slipUrls?.length ?? 0) > 0 || lead.deposit.slipUrl) && (
                 <div className="mt-3">
                   <label className="text-xs font-medium text-gray-500 block mb-2">สลิปการโอนเงิน</label>
-                  <div
-                    className="relative bg-white rounded-lg overflow-hidden border border-blue-200 cursor-pointer hover:shadow-md transition-shadow"
-                    onClick={() => {
-                      const url = lead.deposit?.slipUrl?.startsWith('http')
-                        ? lead.deposit.slipUrl
-                        : `${import.meta.env.VITE_API_URL || ''}${lead.deposit?.slipUrl}`;
-                      window.open(url, '_blank');
-                    }}
-                  >
-                    <img
-                      src={lead.deposit.slipUrl.startsWith('http')
-                        ? lead.deposit.slipUrl
-                        : `${import.meta.env.VITE_API_URL || ''}${lead.deposit.slipUrl}`}
-                      alt="สลิปการโอน"
-                      className="w-full max-h-48 object-contain"
-                    />
-                    <div className="absolute inset-0 bg-black/0 hover:bg-black/10 transition-colors flex items-center justify-center">
-                      <span className="opacity-0 hover:opacity-100 text-white text-xs bg-black/50 px-2 py-1 rounded">
-                        คลิกเพื่อดูขนาดเต็ม
-                      </span>
-                    </div>
+                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                    {(lead.deposit.slipUrls?.length ? lead.deposit.slipUrls : (lead.deposit.slipUrl ? [lead.deposit.slipUrl] : [])).map((url: string, index: number) => {
+                      const fullUrl = url.startsWith('http')
+                        ? url
+                        : `${import.meta.env.VITE_API_URL || ''}${url}`;
+                      return (
+                        <div
+                          key={index}
+                          className="relative aspect-square bg-white rounded-lg overflow-hidden border border-blue-200 cursor-pointer hover:shadow-md transition-shadow"
+                          onClick={() => window.open(fullUrl, '_blank')}
+                        >
+                          <img
+                            src={fullUrl}
+                            alt={`สลิป ${index + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                          <div className="absolute inset-0 bg-black/0 hover:bg-black/20 transition-colors" />
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -1890,30 +1980,29 @@ const ViewLeadModal = ({
                     </div>
                   )}
 
-                  {lead.receiptUrl && (
+                  {((lead.receiptUrls?.length ?? 0) > 0 || lead.receiptUrl) && (
                     <div className="mt-3">
                       <label className="text-xs font-medium text-gray-500 block mb-2">ใบเสร็จ / หลักฐานการรับชำระ</label>
-                      <div
-                        className="relative bg-white rounded-lg overflow-hidden border border-violet-200 cursor-pointer hover:shadow-md transition-shadow"
-                        onClick={() => {
-                          const url = lead.receiptUrl?.startsWith('http')
-                            ? lead.receiptUrl
-                            : `${import.meta.env.VITE_API_URL || ''}${lead.receiptUrl}`;
-                          window.open(url, '_blank');
-                        }}
-                      >
-                        <img
-                          src={lead.receiptUrl.startsWith('http')
-                            ? lead.receiptUrl
-                            : `${import.meta.env.VITE_API_URL || ''}${lead.receiptUrl}`}
-                          alt="ใบเสร็จ"
-                          className="w-full max-h-48 object-contain"
-                        />
-                        <div className="absolute inset-0 bg-black/0 hover:bg-black/10 transition-colors flex items-center justify-center">
-                          <span className="opacity-0 hover:opacity-100 text-white text-xs bg-black/50 px-2 py-1 rounded">
-                            คลิกเพื่อดูขนาดเต็ม
-                          </span>
-                        </div>
+                      <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                        {((lead.receiptUrls?.length ?? 0) > 0 ? lead.receiptUrls! : (lead.receiptUrl ? [lead.receiptUrl] : [])).map((url: string, index: number) => {
+                          const fullUrl = url.startsWith('http')
+                            ? url
+                            : `${import.meta.env.VITE_API_URL || ''}${url}`;
+                          return (
+                            <div
+                              key={index}
+                              className="relative aspect-square bg-white rounded-lg overflow-hidden border border-violet-200 cursor-pointer hover:shadow-md transition-shadow"
+                              onClick={() => window.open(fullUrl, '_blank')}
+                            >
+                              <img
+                                src={fullUrl}
+                                alt={`ใบเสร็จ ${index + 1}`}
+                                className="w-full h-full object-cover"
+                              />
+                              <div className="absolute inset-0 bg-black/0 hover:bg-black/20 transition-colors" />
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
