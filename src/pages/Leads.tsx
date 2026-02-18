@@ -425,7 +425,7 @@ const LeadsPage: React.FC = () => {
                         <th className="px-6 py-4 text-left font-semibold">หัตถการที่สนใจ</th>
                         <th className="px-6 py-4 text-right font-semibold">ยอดชำระ</th>
                         <th className="px-6 py-4 text-left font-semibold">แอดมิน</th>
-                        <th className="px-6 py-4 text-center font-semibold">สถานะ</th>
+                        {/* <th className="px-6 py-4 text-center font-semibold">สถานะ</th> */}
                       </>
                     )}
 
@@ -565,14 +565,14 @@ const LeadsPage: React.FC = () => {
                               {lead.admin || "-"}
                             </td>
 
-                            <td className="px-6 py-4 text-center">
+                            {/* <td className="px-6 py-4 text-center">
                               <button
                                 onClick={() => openStatusModal(lead)}
                                 className="inline-flex items-center justify-center px-4 py-2 text-xs font-semibold rounded-md transition-all bg-green-100 text-green-700 hover:bg-green-200"
                               >
                                 {statusLabel[lead.status]}
                               </button>
-                            </td>
+                            </td> */}
                           </>
                         )}
 
