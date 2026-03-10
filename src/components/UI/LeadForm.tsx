@@ -15,6 +15,7 @@ type InterestFormValue = {
 };
 
 type LeadFormState = {
+  patientId: string;
   name: string;
   nickname: string;
   phone: string;
@@ -58,6 +59,7 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
   const [step, setStep] = useState(1);
   const [branches, setBranches] = useState<{ _id: string, name: string }[]>([]);
   const [formData, setFormData] = useState<LeadFormState>({
+    patientId: lead?.patientId || '',
     name: lead?.name || '',
     nickname: lead?.nickname || '',
     phone: lead?.phone || '',
@@ -82,15 +84,64 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
   const [depositError, setDepositError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
+  // === Patient Autocomplete ===
+  const [patientSuggestions, setPatientSuggestions] = useState<any[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [searchTimeout, setSearchTimeout] = useState<ReturnType<typeof setTimeout> | null>(null);
+
+  const searchPatients = async (query: string) => {
+    if (query.length < 2) {
+      setPatientSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+    try {
+      const res = await api.get(`/patient/search?q=${encodeURIComponent(query)}&limit=5`);
+      const data = res.data?.data || [];
+      setPatientSuggestions(data);
+      setShowSuggestions(data.length > 0);
+    } catch (err) {
+      console.error("Patient search failed", err);
+      setPatientSuggestions([]);
+    }
+  };
+
+  const handleNameChange = (value: string) => {
+    setFormData(prev => ({ ...prev, name: value, patientId: '' }));
+    clearError('name');
+
+    if (searchTimeout) clearTimeout(searchTimeout);
+    const timeout = setTimeout(() => searchPatients(value), 300);
+    setSearchTimeout(timeout);
+  };
+
+  const handleSelectPatient = (patient: any) => {
+    setFormData(prev => ({
+      ...prev,
+      patientId: patient._id,
+      name: patient.fullname || prev.name,
+      nickname: patient.nickname || prev.nickname,
+      phone: patient.tel || prev.phone,
+      socialMedia: patient.socialMedia || prev.socialMedia,
+    }));
+    setShowSuggestions(false);
+    setPatientSuggestions([]);
+    clearError('name');
+  };
+
   useEffect(() => {
-    if (lead?.deposit) {
+    if (lead?.deposit?.amount && lead.deposit.amount > 0) {
       setDepositEnabled(true);
-      setDepositAmount(String(lead.deposit.amount || ''));
+      setDepositAmount(String(lead.deposit.amount));
       if ((lead.deposit.slipUrls?.length ?? 0) > 0) {
         setSlipUrls(lead.deposit.slipUrls!);
       } else if (lead.deposit.slipUrl) {
         setSlipUrls([lead.deposit.slipUrl]);
       }
+    } else {
+      setDepositEnabled(false);
+      setDepositAmount('');
+      setSlipUrls([]);
     }
   }, [lead]);
 
@@ -228,7 +279,8 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
       const leadData: any = {
         ...(lead || {}),
         ...formData,
-        phone: normalizePhone(formData.phone), // ลบ "-" ออก
+        patientId: formData.patientId || undefined,
+        phone: normalizePhone(formData.phone),
         id: lead?.id || '',
         status: backendStatus,
         appointmentDate: backendStatus === 'scheduled' ? formData.appointmentDate : undefined,
@@ -274,17 +326,35 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
       {step === 1 && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
+            <div className="relative">
               <label className="block text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">ชื่อนามสกุล *</label>
               <input
                 type="text"
                 value={formData.name}
-                onChange={(e) => {
-                  setFormData({ ...formData, name: e.target.value });
-                  clearError('name');
-                }}
+                onChange={(e) => handleNameChange(e.target.value)}
+                onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                onFocus={() => { if (patientSuggestions.length > 0) setShowSuggestions(true); }}
+                autoComplete="off"
                 className={`w-full px-3 py-2.5 sm:py-2 border rounded-lg sm:rounded-md text-base sm:text-sm focus:ring-[#1479FF] focus:border-[#1479FF] ${errors.name ? 'border-red-400' : 'border-gray-300'}`}
               />
+              {showSuggestions && patientSuggestions.length > 0 && (
+                <ul className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                  {patientSuggestions.map((p) => (
+                    <li
+                      key={p._id}
+                      onMouseDown={() => handleSelectPatient(p)}
+                      className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm border-b border-gray-50 last:border-b-0"
+                    >
+                      <span className="font-medium text-gray-800">{p.fullname}</span>
+                      {p.nickname && <span className="text-gray-400 ml-1">({p.nickname})</span>}
+                      {p.tel && <span className="text-gray-400 ml-2 text-xs">{p.tel}</span>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {formData.patientId && (
+                <p className="text-xs text-blue-500 mt-1">เลือกจากระบบแล้ว</p>
+              )}
               {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name}</p>}
             </div>
             <div>

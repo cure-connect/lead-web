@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Dashboard from '../pages/Dashboard';
 import Leads from '../pages/Leads';
+import Patients from "../pages/Patients";
 import Login from '../pages/Login';
 import Admin from '../pages/Admin';
 import Setting from '../pages/Setting';
@@ -29,6 +30,10 @@ const AppRoutes: React.FC = () => {
         <Route
           path="/leads"
           element={isAuthenticated ? <Leads /> : <Navigate to="/login" />}
+        />
+        <Route
+          path="/patients"
+          element={isAuthenticated ? <Patients /> : <Navigate to="/login" />}
         />
         <Route
           path="/admin"

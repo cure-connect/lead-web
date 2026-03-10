@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useEffect } from "react";
-import { Search, Plus, Edit2, Trash2, X, Users, CalendarCheck, Clock, XCircle, Eye, UserCheck, Wallet, Calendar, ChevronRight, User, Loader2 } from "lucide-react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
+import { Search, Plus, Edit2, Trash2, X, Users, CalendarCheck, Clock, XCircle, Eye, UserCheck, Wallet, Calendar, ChevronRight, ChevronDown, User, Loader2 } from "lucide-react";
 import { type Lead } from "../types";
 import Modal from "../components/UI/Modal";
 import LeadForm from "../components/UI/LeadForm";
@@ -82,6 +82,7 @@ const LeadsPage: React.FC = () => {
 
         return {
           id: item._id,
+          patientId: item.patientId || item.patient?.patientId || '',
           name: item.patient?.fullname || "",
           nickname: item.patient?.nickname || "",
           phone: item.patient?.tel || "",
@@ -184,6 +185,7 @@ const LeadsPage: React.FC = () => {
       const payload: any = {
         clinic: { branch: lead.branch },
         patient: {
+          patientId: lead.patientId || undefined,
           fullname: lead.name,
           nickname: lead.nickname || undefined,
           tel: lead.phone,
@@ -385,10 +387,10 @@ const LeadsPage: React.FC = () => {
 
               <button
                 onClick={() => { setEditingLead(null); setIsModalOpen(true); }}
-                className="flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 bg-indigo-600 text-white rounded-md whitespace-nowrap text-sm font-medium"
+                className="flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 bg-[#1479FF] text-white rounded-md whitespace-nowrap text-sm font-medium"
               >
                 <Plus className="w-5 h-5" />
-                เพิ่ม Lead
+                เพิ่ม
               </button>
             </div>
 
@@ -870,6 +872,151 @@ const SummaryBox = ({ label, value, color = "text-gray-800", icon }: SummaryBoxP
   );
 };
 
+// ============================================
+// ProcedureComboBox - Dropdown + พิมพ์เองได้
+// ============================================
+interface ProcedureOption {
+  _id: string;
+  name: string;
+}
+
+interface ProcedureComboBoxProps {
+  value: string;
+  onChange: (value: string) => void;
+  options: ProcedureOption[];
+  allowCustom: boolean;
+  placeholder?: string;
+  disabled?: boolean;
+}
+
+const ProcedureComboBox = ({
+  value,
+  onChange,
+  options,
+  allowCustom,
+  placeholder = "เลือกหรือพิมพ์หัตถการ",
+  disabled = false,
+}: ProcedureComboBoxProps) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [inputValue, setInputValue] = useState(value);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setInputValue(value);
+  }, [value]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const filteredOptions = options.filter((opt) =>
+    opt.name.toLowerCase().includes(inputValue.toLowerCase())
+  );
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.value;
+    setInputValue(newValue);
+    setIsOpen(true);
+    if (allowCustom) {
+      onChange(newValue);
+    }
+  };
+
+  const handleSelectOption = (optionName: string) => {
+    setInputValue(optionName);
+    onChange(optionName);
+    setIsOpen(false);
+  };
+
+  const handleClear = () => {
+    setInputValue("");
+    onChange("");
+    inputRef.current?.focus();
+  };
+
+  return (
+    <div ref={containerRef} className="relative">
+      <div className="relative">
+        <input
+          ref={inputRef}
+          type="text"
+          value={inputValue}
+          onChange={handleInputChange}
+          onFocus={() => setIsOpen(true)}
+          placeholder={placeholder}
+          disabled={disabled}
+          readOnly={!allowCustom}
+          className={`w-full px-3 py-2 pr-16 border border-gray-200 rounded-md bg-white text-sm
+            focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+            ${disabled ? "bg-gray-100 cursor-not-allowed" : ""}
+            ${!allowCustom ? "cursor-pointer" : ""}
+          `}
+        />
+        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+          {inputValue && !disabled && (
+            <button type="button" onClick={handleClear} className="p-1 hover:bg-gray-100 rounded">
+              <X className="w-4 h-4 text-gray-400" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => !disabled && setIsOpen(!isOpen)}
+            className="p-1 hover:bg-gray-100 rounded"
+            disabled={disabled}
+          >
+            <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+          </button>
+        </div>
+      </div>
+
+      {isOpen && !disabled && (
+        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+          {filteredOptions.length > 0 ? (
+            filteredOptions.map((opt) => (
+              <button
+                key={opt._id}
+                type="button"
+                onClick={() => handleSelectOption(opt.name)}
+                className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors
+                  ${opt.name.toLowerCase() === inputValue.toLowerCase() ? "bg-blue-50 text-blue-700" : "text-gray-700"}
+                `}
+              >
+                {opt.name}
+              </button>
+            ))
+          ) : (
+            <div className="px-3 py-2 text-sm text-gray-400">
+              {allowCustom && inputValue ? (
+                <span>ใช้ "<span className="text-gray-600">{inputValue}</span>"</span>
+              ) : (
+                "ไม่พบรายการ"
+              )}
+            </div>
+          )}
+          {allowCustom && inputValue && !filteredOptions.some(o => o.name.toLowerCase() === inputValue.toLowerCase()) && filteredOptions.length > 0 && (
+            <div className="border-t border-gray-100 px-3 py-2">
+              <button
+                type="button"
+                onClick={() => handleSelectOption(inputValue)}
+                className="text-sm text-blue-600 hover:text-blue-700"
+              >
+                + ใช้ "{inputValue}"
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 
 const StatusModal = ({
   lead,
@@ -892,8 +1039,9 @@ const StatusModal = ({
       name: string;
       price: string;
       commissionRate: number;
+      depositUsed: string;
     }>
-  >([{ name: "", price: "0", commissionRate: 0 }]);
+  >([{ name: "", price: "0", commissionRate: 0, depositUsed: "0" }]);
 
   const [paymentMethod, setPaymentMethod] = useState("");
   const [serviceChargeRate, setServiceChargeRate] = useState<number>(3);
@@ -910,6 +1058,61 @@ const StatusModal = ({
   const [receiptUrls, setReceiptUrls] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Patient wallet balance
+  const [patientBalance, setPatientBalance] = useState<number>(0);
+
+  // State สำหรับ Procedure Dropdown
+  const [procedureOptions, setProcedureOptions] = useState<Array<{ _id: string; name: string }>>([]);
+  const [procedureConfig, setProcedureConfig] = useState({
+    enabled: false,
+    allowCustom: true,
+  });
+  const [isLoadingOptions, setIsLoadingOptions] = useState(false);
+
+  // Fetch procedure settings
+  useEffect(() => {
+    const fetchProcedureSettings = async () => {
+      try {
+        setIsLoadingOptions(true);
+        const res = await api.get("/setting/gettype");
+
+        if (res.data.procedures) {
+          setProcedureOptions(res.data.procedures);
+        }
+
+        if (res.data.config?.procedure) {
+          setProcedureConfig(res.data.config.procedure);
+        }
+      } catch (err) {
+        console.error("Failed to fetch procedure settings", err);
+      } finally {
+        setIsLoadingOptions(false);
+      }
+    };
+
+    fetchProcedureSettings();
+  }, []);
+
+  // Fetch patient wallet balance
+  useEffect(() => {
+    const fetchPatientBalance = async () => {
+      const pid = (lead as any).patientId;
+      if (!pid) {
+        // fallback ใช้ deposit จาก lead
+        setPatientBalance(lead.deposit?.amount || 0);
+        return;
+      }
+      try {
+        const res = await api.get(`/patient/${pid}`);
+        setPatientBalance(res.data?.data?.balance ?? lead.deposit?.amount ?? 0);
+      } catch (err) {
+        console.error("Failed to fetch patient balance", err);
+        setPatientBalance(lead.deposit?.amount || 0);
+      }
+    };
+    fetchPatientBalance();
+  }, [lead]);
+
   useEffect(() => {
     if (lead.status === "arrived") {
       setSelectedStatus("arrived");
@@ -920,6 +1123,7 @@ const StatusModal = ({
             name: p.name || "",
             price: String(p.price || 0),
             commissionRate: p.commissionRate || 0,
+            depositUsed: String(p.depositUsed || 0),
           }))
         );
       }
@@ -948,6 +1152,13 @@ const StatusModal = ({
     (sum, p) => sum + (parseFloat(p.price) || 0),
     0
   );
+
+  const totalDepositUsed = procedures.reduce(
+    (sum, p) => sum + (parseFloat(p.depositUsed) || 0),
+    0
+  );
+
+  const remainingDeposit = patientBalance - totalDepositUsed;
 
   const serviceChargeAmount = paymentMethod === "card"
     ? Math.round((totalAmount * serviceChargeRate) / 100 * 100) / 100
@@ -979,7 +1190,7 @@ const StatusModal = ({
   const addProcedure = () => {
     setProcedures([
       ...procedures,
-      { name: "", price: "0", commissionRate: 0 },
+      { name: "", price: "0", commissionRate: 0, depositUsed: "0" },
     ]);
   };
 
@@ -1015,6 +1226,16 @@ const StatusModal = ({
 
         if (validProcedures.some(p => parseFloat(p.price) < 0)) {
           setValidationError("จำนวนเงินต้องไม่ติดลบ");
+          return;
+        }
+
+        const calcTotalDepositUsed = validProcedures.reduce(
+          (sum, p) => sum + (parseFloat(p.depositUsed) || 0),
+          0
+        );
+
+        if (calcTotalDepositUsed > patientBalance) {
+          setValidationError(`ใช้มัดจำเกินยอดคงเหลือ (คงเหลือ ${patientBalance.toLocaleString()} บาท)`);
           return;
         }
 
@@ -1105,6 +1326,7 @@ const StatusModal = ({
           procedures: validProcedures.map((p) => ({
             name: p.name,
             price: p.price,
+            ...(parseFloat(p.depositUsed) > 0 ? { depositUsed: parseFloat(p.depositUsed) } : {}),
             ...(commissionEnabled && p.commissionRate > 0
               ? { commissionRate: p.commissionRate }
               : {}),
@@ -1115,6 +1337,7 @@ const StatusModal = ({
 
       if (selectedStatus === "arrived") {
         payload.patient = {
+          patientId: (lead as any).patientId || undefined,
           fullname: patientName || lead.name,
           nickname: nickname || undefined,
           tel: lead.phone,
@@ -1148,6 +1371,7 @@ const StatusModal = ({
         const nextLeadPayload: any = {
           clinic: { branch: lead.branch },
           patient: {
+            patientId: (lead as any).patientId || undefined,
             fullname: patientName || lead.name,
             nickname: nickname || undefined,
             tel: lead.phone,
@@ -1325,9 +1549,26 @@ const StatusModal = ({
                     <span className="text-sm font-medium text-gray-700">เงินมัดจำ</span>
                   </div>
                   <span className="text-lg font-bold text-blue-700">
-                    {lead.deposit?.amount ? lead.deposit.amount.toLocaleString() : 0} บาท
+                    {patientBalance.toLocaleString()} บาท
                   </span>
                 </div>
+                {totalDepositUsed > 0 && (
+                  <div className="mt-3 pt-3 border-t border-blue-200 space-y-1">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">ใช้มัดจำ</span>
+                      <span className="font-medium text-orange-600">-{totalDepositUsed.toLocaleString()} บาท</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600 font-medium">คงเหลือ</span>
+                      <span className={`font-bold ${remainingDeposit < 0 ? 'text-red-600' : 'text-blue-700'}`}>
+                        {remainingDeposit.toLocaleString()} บาท
+                      </span>
+                    </div>
+                    {remainingDeposit < 0 && (
+                      <p className="text-xs text-red-500 mt-1">⚠ ใช้มัดจำเกินยอดคงเหลือ</p>
+                    )}
+                  </div>
+                )}
               </div>
 
               <h3 className="font-semibold text-gray-700">
@@ -1341,14 +1582,30 @@ const StatusModal = ({
                 >
                   <div className="flex gap-3 items-end">
                     <div className="flex-1">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">ชื่อหัตถการ</label>
-                      <input
-                        type="text"
-                        placeholder="ชื่อหัตถการ"
-                        value={procedure.name}
-                        onChange={(e) => updateProcedure(index, "name", e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-200 rounded-md bg-white"
-                      />
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        ชื่อหัตถการ
+                        {procedureConfig.enabled && procedureConfig.allowCustom && (
+                          <span className="text-gray-400 font-normal ml-1 text-xs">(เลือกหรือพิมพ์เอง)</span>
+                        )}
+                      </label>
+                      {procedureConfig.enabled ? (
+                        <ProcedureComboBox
+                          value={procedure.name}
+                          onChange={(value) => updateProcedure(index, "name", value)}
+                          options={procedureOptions}
+                          allowCustom={procedureConfig.allowCustom}
+                          placeholder={procedureConfig.allowCustom ? "เลือกหรือพิมพ์หัตถการ" : "เลือกหัตถการ"}
+                          disabled={isLoadingOptions}
+                        />
+                      ) : (
+                        <input
+                          type="text"
+                          placeholder="ชื่อหัตถการ"
+                          value={procedure.name}
+                          onChange={(e) => updateProcedure(index, "name", e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-md bg-white"
+                        />
+                      )}
                     </div>
 
                     <div className="w-36">
@@ -1368,6 +1625,25 @@ const StatusModal = ({
                         className="w-full px-3 py-2 border border-gray-200 rounded-md bg-white text-right"
                       />
                     </div>
+
+                    {patientBalance > 0 && (
+                      <div className="w-36">
+                        <label className="block text-sm font-medium text-blue-600 mb-1">มัดจำ (บาท)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          placeholder="0"
+                          value={procedure.depositUsed ?? ""}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === "" || parseFloat(val) >= 0) {
+                              updateProcedure(index, "depositUsed", val);
+                            }
+                          }}
+                          className="w-full px-3 py-2 border border-blue-200 rounded-md bg-blue-50 text-right text-blue-700"
+                        />
+                      </div>
+                    )}
 
                     {commissionEnabled && (
                       <div className="w-28">
@@ -1585,9 +1861,9 @@ const StatusModal = ({
                     </div>
 
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">เงินมัดจำ</span>
-                      <span className={`font-medium ${(lead.deposit?.amount || 0) > 0 ? 'text-blue-600' : 'text-gray-500'}`}>
-                        {(lead.deposit?.amount || 0).toLocaleString()} บาท
+                      <span className="text-gray-600">เงินมัดจำที่ใช้</span>
+                      <span className={`font-medium ${totalDepositUsed > 0 ? 'text-blue-600' : 'text-gray-500'}`}>
+                        {totalDepositUsed > 0 ? `-${totalDepositUsed.toLocaleString()}` : '0'} บาท
                       </span>
                     </div>
 

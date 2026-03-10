@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   Settings,
   Users,
+  UserRound,
   LogOut,
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -26,6 +27,11 @@ const Header: React.FC = () => {
       name: "Leads",
       path: "leads",
       icon: <Users className="w-5 h-5" />,
+    },
+    {
+      name: "Patients",
+      path: "patients",
+      icon: <UserRound className="w-5 h-5" />,
     },
     {
       name: "Settings",

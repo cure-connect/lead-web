@@ -33,6 +33,7 @@ export interface LeadDeposit {
 export interface Lead {
   _id: any;
   id: string;
+  patientId?: string;
 
   name: string;
   nickname?: string;
