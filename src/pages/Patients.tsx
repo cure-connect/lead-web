@@ -23,11 +23,13 @@ import {
     Heart,
     Image as ImageIcon,
     Plus,
+    Pencil,
 } from "lucide-react";
 import api from "@/api/api";
 import Modal from "../components/UI/Modal";
 import LeadForm from "../components/UI/LeadForm";
 import { type Lead } from "../types";
+import { useToast, ToastContainer } from "../components/Toast";
 
 // ============================================
 // Types
@@ -181,6 +183,7 @@ type DetailTab = "treatments" | "visits" | "deposits";
 
 const PatientsPage: React.FC = () => {
 
+    const { toasts, toast, removeToast } = useToast();
     const [patients, setPatients] = useState<Patient[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
@@ -207,6 +210,25 @@ const PatientsPage: React.FC = () => {
     const [depositAmount, setDepositAmount] = useState("");
     const [depositDescription, setDepositDescription] = useState("");
     const [depositLoading, setDepositLoading] = useState(false);
+
+    // State: Edit patient modal
+    const [editModal, setEditModal] = useState<Patient | null>(null);
+    const [editForm, setEditForm] = useState({ fullname: "", nickname: "", tel: "", socialMedia: "" });
+    const [editLoading, setEditLoading] = useState(false);
+    const [editTelDuplicate, setEditTelDuplicate] = useState<{ fullname: string; nickname?: string } | null>(null);
+
+    const checkTelDuplicate = async (tel: string, excludeId?: string) => {
+        const normalized = tel.replace(/[-\s]/g, '');
+        if (normalized.length < 9) { setEditTelDuplicate(null); return; }
+        try {
+            const res = await api.get(`/patient/check-tel?tel=${normalized}${excludeId ? `&excludeId=${excludeId}` : ''}`);
+            if (res.data?.exists) {
+                setEditTelDuplicate(res.data.patient);
+            } else {
+                setEditTelDuplicate(null);
+            }
+        } catch { setEditTelDuplicate(null); }
+    };
 
     // ============================================
     // Fetch patients
@@ -313,13 +335,48 @@ const PatientsPage: React.FC = () => {
 
             await api.post(endpoint, { amount, description: depositDescription || undefined });
             setDepositModal(null);
+            toast.success(type === "deposit" ? "เพิ่มมัดจำสำเร็จ" : type === "refund" ? "คืนมัดจำสำเร็จ" : "ปรับยอดสำเร็จ");
             await fetchPatients(searchQuery);
             if (expandedPatientId === patientId) await fetchPatientDetail(patientId);
         } catch (error: any) {
             console.error("Deposit action failed:", error);
-            alert(error.response?.data?.message || "ทำรายการไม่สำเร็จ");
+            toast.error(error.response?.data?.message || "ทำรายการไม่สำเร็จ");
         } finally {
             setDepositLoading(false);
+        }
+    };
+
+    const openEditModal = (patient: Patient) => {
+        setEditForm({
+            fullname: patient.fullname || "",
+            nickname: patient.nickname || "",
+            tel: patient.tel || "",
+            socialMedia: patient.socialMedia || "",
+        });
+        setEditTelDuplicate(null);
+        setEditModal(patient);
+    };
+
+    const handleEditSubmit = async () => {
+        if (!editModal || !editForm.fullname.trim()) return;
+        setEditLoading(true);
+        try {
+            await api.patch(`/patient/${editModal._id}`, {
+                fullname: editForm.fullname.trim(),
+                nickname: editForm.nickname.trim() || undefined,
+                tel: editForm.tel.trim() || undefined,
+                socialMedia: editForm.socialMedia.trim() || undefined,
+            });
+            setEditModal(null);
+            toast.success("แก้ไขข้อมูลคนไข้สำเร็จ");
+            await fetchPatients(searchQuery);
+            if (expandedPatientId === editModal._id) {
+                await fetchPatientDetail(editModal._id);
+            }
+        } catch (error: any) {
+            toast.error(error.response?.data?.message || "แก้ไขข้อมูลไม่สำเร็จ");
+        } finally {
+            setEditLoading(false);
         }
     };
 
@@ -372,6 +429,7 @@ const PatientsPage: React.FC = () => {
 
             setLeadFormOpen(false);
             setLeadFormPatient(null);
+            toast.success("เพิ่ม Lead สำเร็จ");
 
             // Refresh patient detail ถ้ากำลังเปิดอยู่
             if (expandedPatientId) {
@@ -379,7 +437,7 @@ const PatientsPage: React.FC = () => {
             }
         } catch (error: any) {
             console.error("Create lead failed:", error);
-            alert(error.response?.data?.message || error.message || "เพิ่ม Lead ไม่สำเร็จ");
+            toast.error(error.response?.data?.message || error.message || "เพิ่ม Lead ไม่สำเร็จ");
         }
     };
 
@@ -389,6 +447,7 @@ const PatientsPage: React.FC = () => {
 
     return (
         <div className="min-h-screen bg-gray-50">
+            <ToastContainer toasts={toasts} onClose={removeToast} />
             <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-2 pb-24 sm:py-8">
 
                 {/* Search */}
@@ -473,6 +532,9 @@ const PatientsPage: React.FC = () => {
                                         <div className="border-t border-gray-100">
                                             {/* Actions */}
                                             <div className="px-4 sm:px-5 py-3 bg-gray-50 flex flex-wrap gap-2">
+                                                <button onClick={(e) => { e.stopPropagation(); openEditModal(patient); }} className="flex items-center gap-1.5 px-3 py-2 bg-gray-600 hover:bg-gray-700 text-white text-xs font-medium rounded-lg transition-colors">
+                                                    <Pencil className="w-3.5 h-3.5" /> แก้ไขข้อมูล
+                                                </button>
                                                 <button onClick={(e) => { e.stopPropagation(); openDepositModal("deposit", patient); }} className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium rounded-lg transition-colors">
                                                     <ArrowDownCircle className="w-3.5 h-3.5" /> เพิ่มมัดจำ
                                                 </button>
@@ -482,8 +544,8 @@ const PatientsPage: React.FC = () => {
                                                 <button onClick={(e) => { e.stopPropagation(); openDepositModal("adjust", patient); }} className="flex items-center gap-1.5 px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white text-xs font-medium rounded-lg transition-colors">
                                                     <SlidersHorizontal className="w-3.5 h-3.5" /> ปรับยอด
                                                 </button>
-                                                <button onClick={(e) => { e.stopPropagation(); handleAddLead(patient); }} className="flex items-center gap-1.5 p-2 sm:px-3 sm:py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition-colors ml-auto">
-                                                    <Plus className="w-3.5 h-3.5" /><span className="hidden sm:inline"> เพิ่ม Lead</span>
+                                                <button onClick={(e) => { e.stopPropagation(); handleAddLead(patient); }} className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition-colors ml-auto">
+                                                    <Plus className="w-3.5 h-3.5" /> เพิ่ม Lead
                                                 </button>
                                             </div>
 
@@ -909,6 +971,88 @@ const PatientsPage: React.FC = () => {
                                 className={`flex-1 px-4 py-2.5 text-white text-sm font-medium rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-50 ${depositModal.type === "deposit" ? "bg-emerald-600 hover:bg-emerald-700" : depositModal.type === "refund" ? "bg-amber-500 hover:bg-amber-600" : "bg-blue-500 hover:bg-blue-600"}`}>
                                 {depositLoading && <Loader2 className="w-4 h-4 animate-spin" />}
                                 {depositModal.type === "deposit" ? "เพิ่มมัดจำ" : depositModal.type === "refund" ? "คืนมัดจำ" : "ปรับยอด"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ============================================ */}
+            {/* Edit Patient Modal */}
+            {/* ============================================ */}
+            {editModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/40" onClick={() => setEditModal(null)} />
+                    <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+                        <div className="px-6 py-4 bg-gray-700">
+                            <div className="flex items-center justify-between">
+                                <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                                    <Pencil className="w-5 h-5" /> แก้ไขข้อมูลคนไข้
+                                </h3>
+                                <button onClick={() => setEditModal(null)} className="text-white/70 hover:text-white"><X className="w-5 h-5" /></button>
+                            </div>
+                            <p className="text-white/80 text-sm mt-1">{editModal.fullname}</p>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">ชื่อ-นามสกุล <span className="text-red-500">*</span></label>
+                                <input
+                                    type="text"
+                                    value={editForm.fullname}
+                                    onChange={(e) => setEditForm((f) => ({ ...f, fullname: e.target.value }))}
+                                    placeholder="ชื่อ-นามสกุล"
+                                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:outline-none"
+                                    autoFocus
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">ชื่อเล่น</label>
+                                <input
+                                    type="text"
+                                    value={editForm.nickname}
+                                    onChange={(e) => setEditForm((f) => ({ ...f, nickname: e.target.value }))}
+                                    placeholder="ชื่อเล่น"
+                                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">เบอร์โทร</label>
+                                <input
+                                    type="tel"
+                                    value={editForm.tel}
+                                    onChange={(e) => { setEditForm((f) => ({ ...f, tel: e.target.value })); setEditTelDuplicate(null); }}
+                                    onBlur={() => checkTelDuplicate(editForm.tel, editModal?._id)}
+                                    placeholder="0xx-xxx-xxxx"
+                                    className={`w-full px-4 py-2.5 bg-gray-50 border rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:outline-none ${editTelDuplicate ? 'border-amber-400' : 'border-gray-200'}`}
+                                />
+                                {editTelDuplicate && (
+                                    <p className="text-xs text-amber-600 mt-1">
+                                        ⚠ เบอร์นี้ซ้ำกับ: {editTelDuplicate.fullname}{editTelDuplicate.nickname ? ` (${editTelDuplicate.nickname})` : ''}
+                                    </p>
+                                )}
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Social Media</label>
+                                <input
+                                    type="text"
+                                    value={editForm.socialMedia}
+                                    onChange={(e) => setEditForm((f) => ({ ...f, socialMedia: e.target.value }))}
+                                    placeholder="Line ID, Facebook, IG..."
+                                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:outline-none"
+                                />
+                            </div>
+                        </div>
+                        <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
+                            <button onClick={() => setEditModal(null)} className="flex-1 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-xl transition-colors">
+                                ยกเลิก
+                            </button>
+                            <button
+                                onClick={handleEditSubmit}
+                                disabled={editLoading || !editForm.fullname.trim()}
+                                className="flex-1 px-4 py-2.5 bg-gray-700 hover:bg-gray-800 text-white text-sm font-medium rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                            >
+                                {editLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                                บันทึก
                             </button>
                         </div>
                     </div>

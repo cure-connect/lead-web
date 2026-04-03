@@ -83,6 +83,21 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
   const [slipUrls, setSlipUrls] = useState<string[]>([]);
   const [depositError, setDepositError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [phoneDuplicate, setPhoneDuplicate] = useState<{ fullname: string; nickname?: string } | null>(null);
+
+  const checkPhoneDuplicate = async (phone: string) => {
+    const normalized = phone.replace(/[-\s]/g, '');
+    if (normalized.length < 9) { setPhoneDuplicate(null); return; }
+    try {
+      const patientId = (lead as any)?.patientId;
+      const res = await api.get(`/patient/check-tel?tel=${normalized}${patientId ? `&excludeId=${patientId}` : ''}`);
+      if (res.data?.exists) {
+        setPhoneDuplicate(res.data.patient);
+      } else {
+        setPhoneDuplicate(null);
+      }
+    } catch { setPhoneDuplicate(null); }
+  };
 
   // === Patient Autocomplete ===
   const [patientSuggestions, setPatientSuggestions] = useState<any[]>([]);
@@ -126,6 +141,7 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
     }));
     setShowSuggestions(false);
     setPatientSuggestions([]);
+    setPhoneDuplicate(null);
     clearError('name');
   };
 
@@ -377,10 +393,17 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
                 onChange={(e) => {
                   setFormData({ ...formData, phone: e.target.value });
                   clearError('phone');
+                  setPhoneDuplicate(null);
                 }}
-                className={`w-full px-3 py-2.5 sm:py-2 border rounded-lg sm:rounded-md text-base sm:text-sm focus:ring-[#1479FF] focus:border-[#1479FF] ${errors.phone ? 'border-red-400' : 'border-gray-300'}`}
+                onBlur={() => { if (!formData.patientId) checkPhoneDuplicate(formData.phone); }}
+                className={`w-full px-3 py-2.5 sm:py-2 border rounded-lg sm:rounded-md text-base sm:text-sm focus:ring-[#1479FF] focus:border-[#1479FF] ${errors.phone || phoneDuplicate ? 'border-red-400' : 'border-gray-300'}`}
               />
               {errors.phone && <p className="text-xs text-red-500 mt-1">{errors.phone}</p>}
+              {phoneDuplicate && !errors.phone && (
+                <p className="text-xs text-red-500 mt-1">
+                  ⚠ เบอร์นี้ซ้ำกับ: {phoneDuplicate.fullname}{phoneDuplicate.nickname ? ` (${phoneDuplicate.nickname})` : ''}
+                </p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">Social Media</label>
@@ -476,7 +499,8 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
             </button>
             <button
               onClick={handleNextStep}
-              className="w-full sm:w-auto px-5 py-2.5 sm:py-2 bg-[#1479FF] text-white rounded-lg text-sm font-medium hover:bg-[#0066E6] transition-colors"
+              disabled={!!phoneDuplicate}
+              className={`w-full sm:w-auto px-5 py-2.5 sm:py-2 rounded-lg text-sm font-medium transition-colors ${phoneDuplicate ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-[#1479FF] text-white hover:bg-[#0066E6]'}`}
             >
               ถัดไป
             </button>
