@@ -1,22 +1,20 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
-  Users,
   CalendarCheck,
   Clock,
   Banknote,
   TrendingUp,
   Wallet,
-  BadgePercent,
-  Eye,
-  EyeOff,
-  Star,
-  Radio,
   UserPlus,
   UserX,
   UserCheck,
   ChevronLeft,
   ChevronRight,
+  Download,
+  Star,
+  Radio,
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import api from '@/api/api';
 
 const formatShortDate = (dateStr: string) => {
@@ -24,6 +22,23 @@ const formatShortDate = (dateStr: string) => {
   return `${String(date.getDate()).padStart(2, "0")}/${String(
     date.getMonth() + 1
   ).padStart(2, "0")}/${date.getFullYear()}`;
+};
+
+// แปลชื่อช่องทางการชำระเงินให้อ่านง่าย
+const formatPaymentMethod = (method?: string) => {
+  if (!method) return '-';
+  const map: Record<string, string> = {
+    cash: 'เงินสด',
+    transfer: 'โอนเงิน',
+    bank_transfer: 'โอนเงิน',
+    credit_card: 'บัตรเครดิต',
+    debit_card: 'บัตรเดบิต',
+    card: 'บัตรเครดิต',
+    qr: 'QR Code',
+    qr_code: 'QR Code',
+    promptpay: 'พร้อมเพย์',
+  };
+  return map[method.toLowerCase()] || method;
 };
 
 interface Lead {
@@ -42,7 +57,6 @@ interface Lead {
     name: string;
     price: string;
     depositUsed?: number;
-    commissionRate?: number;
   }>;
   admin?: string;
   referralChannel?: string;
@@ -56,14 +70,6 @@ interface Lead {
       rate: number;
       amount: number;
       netAmount: number;
-    };
-    commission?: {
-      totalAmount: number;
-      details?: Array<{
-        procedureName: string;
-        rate: number;
-        amount: number;
-      }>;
     };
   };
 }
@@ -87,7 +93,6 @@ const DashboardPage: React.FC = () => {
   const [newPatientInterests, setNewPatientInterests] = useState<Record<string, number>>({});
   const [newPatientChannels, setNewPatientChannels] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
-  const [showCommission, setShowCommission] = useState(false);
   const [newPatientPage, setNewPatientPage] = useState(1);
   const NEW_PATIENT_PER_PAGE = 10;
 
@@ -129,7 +134,6 @@ const DashboardPage: React.FC = () => {
               name: p.name,
               price: p.price,
               depositUsed: Number(p.depositUsed) || 0,
-              commissionRate: p.commissionRate || 0,
             }))
             : [],
           admin: item.createdBy || '',
@@ -191,7 +195,6 @@ const DashboardPage: React.FC = () => {
   }, [selectedYear, monthPrefix]);
 
   const statistics = useMemo(() => {
-    // Helper: นับจำนวนคนไข้ unique จาก leads
     const countUniquePatients = (list: Lead[]) => {
       const seen = new Set<string>();
       list.forEach((lead) => {
@@ -227,36 +230,12 @@ const DashboardPage: React.FC = () => {
         lead.appointmentDate?.startsWith(monthPrefix)
     );
 
-    // Sort by appointment date (arrived leads)
-    const sortedArrived = [...arrivedThisMonth].sort((a, b) => {
-      if (!a.appointmentDate || !b.appointmentDate) return 0;
-      return new Date(b.appointmentDate).getTime() - new Date(a.appointmentDate).getTime();
-    });
-
-    // Group by patient
-    const patientGroupMap = new Map<string, { name: string; nickname?: string; leads: Lead[] }>();
-    sortedArrived.forEach((lead) => {
-      // ใช้ patientId เป็น key หลัก
-      // ถ้าไม่มี patientId → ใช้ชื่อ+เบอร์โทร, ถ้าไม่มีเบอร์โทร → แยกเป็น lead ตัวเอง
-      const key = lead.patientId
-        ? lead.patientId
-        : lead.phone
-          ? `${lead.name}|${lead.phone}`
-          : `lead-${lead.id}`;
-      if (!patientGroupMap.has(key)) {
-        patientGroupMap.set(key, { name: lead.name, nickname: lead.nickname, leads: [] });
-      }
-      patientGroupMap.get(key)!.leads.push(lead);
-    });
-    const patientGroups = Array.from(patientGroupMap.values());
-
     return {
       scheduledVisits: scheduledThisMonth.length,
       scheduledPatients: countUniquePatients(scheduledThisMonth),
-      arrivedVisits: sortedArrived.length,
-      arrivedPatients: patientGroups.length,
-      arrivedLeads: sortedArrived,
-      patientGroups,
+      arrivedVisits: arrivedThisMonth.length,
+      arrivedPatients: countUniquePatients(arrivedThisMonth),
+      arrivedLeads: arrivedThisMonth,
       pendingVisits: pendingNextVisit.length,
       pendingPatients: countUniquePatients(pendingNextVisit),
       noNextVisits: noNextAppointment.length,
@@ -278,45 +257,125 @@ const DashboardPage: React.FC = () => {
     });
   }, [newPatients, leads]);
 
-  const finance = useMemo(() => {
-    const arrivedThisMonth = leads.filter(
-      (lead) =>
-        lead.status === 'arrived' &&
-        lead.appointmentDate?.startsWith(monthPrefix) &&
-        lead.payments
-    );
+  // สรุปค่าใช้จ่าย: 1 row = 1 visit ที่มีการชำระเงิน
+  const paymentRows = useMemo(() => {
+    return leads
+      .filter(
+        (lead) =>
+          lead.status === 'arrived' &&
+          lead.appointmentDate?.startsWith(monthPrefix) &&
+          lead.payments
+      )
+      .sort((a, b) => {
+        const dateA = a.appointmentDate ? new Date(a.appointmentDate).getTime() : 0;
+        const dateB = b.appointmentDate ? new Date(b.appointmentDate).getTime() : 0;
+        return dateB - dateA;
+      })
+      .map((lead) => {
+        const proceduresText = lead.procedures.length > 0
+          ? lead.procedures.map((p) => p.name).join(', ')
+          : 'ปรึกษาฟรี';
+        const proceduresTotal = lead.procedures.reduce(
+          (s, p) => s + (parseFloat(p.price) || 0),
+          0
+        );
+        const depositUsed = lead.procedures.reduce(
+          (s, p) => s + (p.depositUsed || 0),
+          0
+        );
+        const amount = lead.payments?.amount || 0;
+        const serviceCharge = lead.payments?.serviceCharge?.amount || 0;
+        const netAmount = lead.payments?.serviceCharge?.netAmount ?? amount;
+        return {
+          id: lead.id,
+          name: lead.name,
+          nickname: lead.nickname || '',
+          date: lead.appointmentDate ? formatShortDate(lead.appointmentDate) : '-',
+          procedures: proceduresText,
+          proceduresTotal,
+          depositUsed,
+          amount,
+          method: lead.payments?.method || '',
+          methodLabel: formatPaymentMethod(lead.payments?.method),
+          serviceCharge,
+          netAmount,
+        };
+      });
+  }, [leads, monthPrefix]);
 
+  const finance = useMemo(() => {
     let totalRevenue = 0;
     let totalNetRevenue = 0;
-    let totalCommission = 0;
     let totalServiceCharge = 0;
 
-    arrivedThisMonth.forEach((lead) => {
-      if (lead.payments) {
-        const amount = lead.payments.amount || 0;
-        totalRevenue += amount;
-
-        if (lead.payments.serviceCharge) {
-          totalNetRevenue += lead.payments.serviceCharge.netAmount || 0;
-          totalServiceCharge += lead.payments.serviceCharge.amount || 0;
-        } else {
-          totalNetRevenue += amount;
-        }
-
-        if (lead.payments.commission) {
-          totalCommission += lead.payments.commission.totalAmount || 0;
-        }
-      }
+    paymentRows.forEach((row) => {
+      totalRevenue += row.amount;
+      totalNetRevenue += row.netAmount;
+      totalServiceCharge += row.serviceCharge;
     });
 
     return {
       totalRevenue,
       totalNetRevenue,
-      totalCommission,
       totalServiceCharge,
-      transactionCount: arrivedThisMonth.length,
+      transactionCount: paymentRows.length,
     };
-  }, [leads, monthPrefix]);
+  }, [paymentRows]);
+
+  // Export ตารางสรุปค่าใช้จ่ายเป็น xlsx
+  const handleExportXlsx = () => {
+    if (paymentRows.length === 0) return;
+
+    const data = paymentRows.map((row, i) => ({
+      '#': i + 1,
+      'ชื่อ-นามสกุล': row.name,
+      'ชื่อเล่น': row.nickname,
+      'วันที่': row.date,
+      'รายการ': row.procedures,
+      'ยอดรวม': row.proceduresTotal,
+      'ใช้มัดจำ': row.depositUsed,
+      'ยอดชำระ': row.amount,
+      'ช่องทาง': row.methodLabel,
+      'ค่าธรรมเนียม': row.serviceCharge,
+      'ยอดสุทธิ': row.netAmount,
+    }));
+
+    // เพิ่มแถว total
+    data.push({
+      '#': '' as any,
+      'ชื่อ-นามสกุล': 'รวมทั้งหมด',
+      'ชื่อเล่น': '',
+      'วันที่': '',
+      'รายการ': `${paymentRows.length} รายการ`,
+      'ยอดรวม': paymentRows.reduce((s, r) => s + r.proceduresTotal, 0),
+      'ใช้มัดจำ': paymentRows.reduce((s, r) => s + r.depositUsed, 0),
+      'ยอดชำระ': finance.totalRevenue,
+      'ช่องทาง': '',
+      'ค่าธรรมเนียม': finance.totalServiceCharge,
+      'ยอดสุทธิ': finance.totalNetRevenue,
+    });
+
+    const ws = XLSX.utils.json_to_sheet(data);
+
+    // กำหนดความกว้างคอลัมน์
+    ws['!cols'] = [
+      { wch: 5 },   // #
+      { wch: 25 },  // ชื่อ-นามสกุล
+      { wch: 12 },  // ชื่อเล่น
+      { wch: 12 },  // วันที่
+      { wch: 35 },  // รายการ
+      { wch: 12 },  // ยอดรวม
+      { wch: 12 },  // ใช้มัดจำ
+      { wch: 12 },  // ยอดชำระ
+      { wch: 14 },  // ช่องทาง
+      { wch: 14 },  // ค่าธรรมเนียม
+      { wch: 14 },  // ยอดสุทธิ
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'สรุปค่าใช้จ่าย');
+    XLSX.writeFile(wb, `payment-summary-${monthPrefix}.xlsx`);
+  };
 
   if (loading) {
     return (
@@ -543,20 +602,6 @@ const DashboardPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-purple-100 rounded-lg">
-                      <BadgePercent className="w-5 h-5 text-purple-600" />
-                    </div>
-                    <span className="text-sm text-gray-600">ค่าคอมมิชชัน</span>
-                  </div>
-                  <p className="text-2xl font-bold text-purple-700">
-                    {finance.totalCommission.toLocaleString()} <span className="text-base font-normal">บาท</span>
-                  </p>
-                </div>
-              </div>
-
               {finance.totalServiceCharge > 0 && (
                 <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
                   <div className="flex items-center justify-between mb-2">
@@ -586,7 +631,6 @@ const DashboardPage: React.FC = () => {
                   </div>
                 </div>
               )}
-
 
               {finance.transactionCount === 0 && (
                 <div className="text-center text-gray-400 text-sm py-4 border-t">
@@ -639,17 +683,21 @@ const DashboardPage: React.FC = () => {
                           </td>
                           <td className="px-4 py-2.5">
                             {p.interest ? (
-                              <span className="inline-flex px-2 py-0.5 bg-amber-50 text-amber-700 text-xs rounded-full border border-amber-200">
+                              <span className="inline-flex px-2 py-0.5 bg-amber-50 text-amber-700 text-[11px] rounded-full border border-amber-200">
                                 {p.interest}
                               </span>
-                            ) : <span className="text-gray-400">-</span>}
+                            ) : (
+                              <span className="text-gray-400 text-xs">-</span>
+                            )}
                           </td>
                           <td className="px-4 py-2.5">
                             {p.referralChannel ? (
-                              <span className="inline-flex px-2 py-0.5 bg-purple-50 text-purple-700 text-xs rounded-full border border-purple-200">
+                              <span className="inline-flex px-2 py-0.5 bg-purple-50 text-purple-700 text-[11px] rounded-full border border-purple-200">
                                 {p.referralChannel}
                               </span>
-                            ) : <span className="text-gray-400">-</span>}
+                            ) : (
+                              <span className="text-gray-400 text-xs">-</span>
+                            )}
                           </td>
                           <td className="px-4 py-2.5 text-gray-600 text-xs">{p.branch || '-'}</td>
                           <td className="px-4 py-2.5 text-gray-600 text-xs">{p.createdBy || '-'}</td>
@@ -747,347 +795,237 @@ const DashboardPage: React.FC = () => {
           )}
         </div>
 
-        {/* ตารางคนไข้ที่มาตามนัด */}
+        {/* ตารางสรุปค่าใช้จ่าย */}
         <div className="mt-6 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="bg-linear-to-r from-green-500 to-green-600 px-6 py-4 flex items-center justify-between">
+          <div className="bg-linear-to-r from-emerald-500 to-emerald-600 px-6 py-4 flex items-center justify-between gap-3">
             <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-              <Users className="w-5 h-5" />
-              คนไข้ที่มาตามนัด ({statistics.arrivedPatients} คน / {statistics.arrivedLeads.length} ครั้ง)
+              <Wallet className="w-5 h-5" />
+              สรุปค่าใช้จ่าย ({paymentRows.length} รายการ)
             </h2>
             <button
-              onClick={() => setShowCommission(!showCommission)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white text-xs font-medium rounded-lg transition-colors"
+              onClick={handleExportXlsx}
+              disabled={paymentRows.length === 0}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              {showCommission ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-              ค่าคอมมิชชัน
+              <Download className="w-3.5 h-3.5" />
+              Export Excel
             </button>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-5 py-3 text-left font-semibold text-gray-600 border-b border-gray-200" style={{ minWidth: 180 }}>
-                    ชื่อ นามสกุล (ชื่อเล่น)
-                  </th>
-                  <th className="px-4 py-3 text-center font-semibold text-gray-600 border-b border-gray-200" style={{ minWidth: 70 }}>
-                    วันที่
-                  </th>
-                  <th className="px-4 py-3 text-center font-semibold text-gray-600 border-b border-gray-200" style={{ minWidth: 120 }}>
-                    รายการ
-                  </th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600 border-b border-gray-200" style={{ minWidth: 110 }}>
-                    ยอด
-                  </th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600 border-b border-gray-200" style={{ minWidth: 120 }}>
-                    ใช้มัดจำ
-                  </th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600 border-b border-gray-200" style={{ minWidth: 110 }}>
-                    มัดจำคงเหลือ
-                  </th>
-                  {showCommission && (
-                    <th className="px-4 py-3 text-right font-semibold text-purple-600 border-b border-gray-200 bg-purple-50" style={{ minWidth: 130 }}>
-                      ค่าคอมมิชชัน
-                    </th>
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {statistics.patientGroups.length === 0 ? (
-                  <tr>
-                    <td colSpan={showCommission ? 7 : 6} className="px-6 py-16 text-center">
-                      <div className="flex flex-col items-center justify-center text-gray-400">
-                        <Users className="w-12 h-12 mb-4 opacity-50" />
-                        <p className="text-lg font-medium text-gray-500">ยังไม่มีคนไข้มาตามนัดในเดือนนี้</p>
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  statistics.patientGroups.map((group, groupIndex) => {
-                    // สร้าง rows ทุก leads ของคนไข้คนนี้
-                    type RowData = {
-                      type: 'deposit' | 'procedure';
-                      leadId: string;
-                      date: string;
-                      label: string;
-                      amount: number;
-                      depositChange: number;
-                      depositBalance: number;
-                      commissionText: string;
-                      isFirstOfLead: boolean;
-                      leadIndex: number;
-                    };
-
-                    const allRows: RowData[] = [];
-                    let groupTotalAmount = 0;
-                    let groupTotalCommission = 0;
-                    let groupTotalDepositUsed = 0;
-                    let groupRunningDeposit = 0;
-
-                    // เรียง leads ภายใน group จากใหม่ → เก่า
-                    const sortedLeads = [...group.leads].sort((a, b) => {
-                      const dateA = a.appointmentDate ? new Date(a.appointmentDate).getTime() : 0;
-                      const dateB = b.appointmentDate ? new Date(b.appointmentDate).getTime() : 0;
-                      return dateB - dateA;
-                    });
-
-                    sortedLeads.forEach((lead, leadIdx) => {
-                      const depositAmount = lead.deposit?.amount || 0;
-                      let isFirst = true;
-
-                      // แถว: วางมัดจำ
-                      if (depositAmount > 0) {
-                        groupRunningDeposit += depositAmount;
-                        allRows.push({
-                          type: 'deposit',
-                          leadId: lead.id,
-                          date: lead.appointmentDate ? formatShortDate(lead.appointmentDate) : (lead.createdAt ? formatShortDate(lead.createdAt) : '-'),
-                          label: 'วางมัดจำ',
-                          amount: depositAmount,
-                          depositChange: depositAmount,
-                          depositBalance: groupRunningDeposit,
-                          commissionText: '-',
-                          isFirstOfLead: isFirst,
-                          leadIndex: leadIdx,
-                        });
-                        isFirst = false;
-                      }
-
-                      // แถว: หัตถการ
-                      let leadTotalAmount = 0;
-                      let leadTotalCommission = 0;
-                      let leadTotalDepositUsed = 0;
-
-                      lead.procedures.forEach((proc) => {
-                        const price = parseFloat(proc.price) || 0;
-                        const depositUsedForProc = proc.depositUsed || 0;
-                        leadTotalAmount += price;
-                        leadTotalDepositUsed += depositUsedForProc;
-
-                        if (depositUsedForProc > 0) {
-                          groupRunningDeposit -= depositUsedForProc;
-                        }
-
-                        let commText = '-';
-                        const commDetail = lead.payments?.commission?.details?.find(
-                          (d) => d.procedureName === proc.name
-                        );
-                        if (commDetail && commDetail.amount > 0) {
-                          leadTotalCommission += commDetail.amount;
-                          commText = `${commDetail.rate}% = ${commDetail.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-                        } else if (proc.commissionRate && proc.commissionRate > 0 && price > 0) {
-                          const commAmount = Math.round((price * proc.commissionRate) / 100 * 100) / 100;
-                          leadTotalCommission += commAmount;
-                          commText = `${proc.commissionRate}% = ${commAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-                        }
-
-                        allRows.push({
-                          type: 'procedure',
-                          leadId: lead.id,
-                          date: lead.appointmentDate ? formatShortDate(lead.appointmentDate) : '-',
-                          label: proc.name,
-                          amount: price,
-                          depositChange: depositUsedForProc > 0 ? -depositUsedForProc : 0,
-                          depositBalance: groupRunningDeposit,
-                          commissionText: commText,
-                          isFirstOfLead: isFirst,
-                          leadIndex: leadIdx,
-                        });
-                        isFirst = false;
-                      });
-
-                      if (lead.procedures.length === 0) {
-                        allRows.push({
-                          type: 'procedure',
-                          leadId: lead.id,
-                          date: lead.appointmentDate ? formatShortDate(lead.appointmentDate) : '-',
-                          label: 'ปรึกษาฟรี',
-                          amount: 0,
-                          depositChange: 0,
-                          depositBalance: groupRunningDeposit,
-                          commissionText: '-',
-                          isFirstOfLead: isFirst,
-                          leadIndex: leadIdx,
-                        });
-                        isFirst = false;
-                      }
-
-                      const finalLeadCommission = lead.payments?.commission?.totalAmount || leadTotalCommission;
-
-                      groupTotalAmount += leadTotalAmount;
-                      groupTotalCommission += finalLeadCommission;
-                      groupTotalDepositUsed += leadTotalDepositUsed;
-                    });
-
-                    // +1 for group summary row
-                    const totalRowSpan = allRows.length + 1;
-
-                    // คำนวณ date rowSpan — group วันที่เดียวกันติดกัน
-                    const dateSpans: Array<{ show: boolean; span: number }> = [];
-                    for (let i = 0; i < allRows.length; i++) {
-                      if (i === 0 || allRows[i].date !== allRows[i - 1].date) {
-                        let span = 1;
-                        for (let j = i + 1; j < allRows.length && allRows[j].date === allRows[i].date; j++) {
-                          span++;
-                        }
-                        dateSpans.push({ show: true, span });
-                      } else {
-                        dateSpans.push({ show: false, span: 0 });
-                      }
-                    }
-
-                    return (
-                      <React.Fragment key={`group-${groupIndex}`}>
-                        {allRows.map((row, rowIndex) => (
-                          <tr
-                            key={`${row.leadId}-${rowIndex}`}
-                            className={`border-b border-gray-100 ${row.type === 'deposit' ? 'bg-blue-50/40' : 'hover:bg-gray-50'
-                              }`}
-                          >
-                            {/* ชื่อคนไข้ — rowSpan ทั้ง group */}
-                            {rowIndex === 0 && (
-                              <td
-                                className="px-5 py-3 align-top border-r border-gray-200 font-medium text-gray-900"
-                                rowSpan={totalRowSpan}
-                              >
-                                <div>
-                                  {group.name}
-                                  {group.nickname && (
-                                    <span className="text-gray-500 font-normal"> ({group.nickname})</span>
-                                  )}
-                                  {group.leads.length > 1 && (
-                                    <div className="text-xs text-indigo-500 mt-1">{group.leads.length} ครั้ง</div>
-                                  )}
-                                </div>
-                              </td>
-                            )}
-
-                            {/* วันที่ — group วันเดียวกัน */}
-                            {dateSpans[rowIndex].show && (
-                              <td
-                                className="px-4 py-2.5 text-center text-gray-600"
-                                rowSpan={dateSpans[rowIndex].span}
-                              >
-                                {row.date}
-                              </td>
-                            )}
-
-                            {/* รายการ */}
-                            <td className={`px-4 py-2.5 text-center font-medium ${row.type === 'deposit' ? 'text-blue-600' : 'text-gray-700'
-                              }`}>
-                              {row.label}
-                            </td>
-
-                            {/* ยอด */}
-                            <td className={`px-4 py-2.5 text-right tabular-nums ${row.type === 'deposit' ? 'text-blue-600' : 'text-gray-800'
-                              }`}>
-                              {row.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </td>
-
-                            {/* ใช้มัดจำ */}
-                            <td className="px-4 py-2.5 text-right tabular-nums">
-                              {row.depositChange > 0 ? (
-                                <span className="text-emerald-600 font-medium">
-                                  +{row.depositChange.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                </span>
-                              ) : row.depositChange < 0 ? (
-                                <span className="text-red-600 font-medium">
-                                  -{Math.abs(row.depositChange).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                </span>
-                              ) : (
-                                <span className="text-gray-400">-</span>
-                              )}
-                            </td>
-
-                            {/* มัดจำคงเหลือ */}
-                            <td className={`px-4 py-2.5 text-right tabular-nums ${row.depositBalance < 0 ? 'text-red-600' : 'text-gray-600'
-                              }`}>
-                              {(groupRunningDeposit !== 0 || row.type === 'deposit')
-                                ? row.depositBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                                : '-'
-                              }
-                            </td>
-
-                            {/* ค่าคอมมิชชัน */}
-                            {showCommission && (
-                              <td className="px-4 py-2.5 text-right tabular-nums text-purple-600 bg-purple-50/30">
-                                {row.commissionText}
-                              </td>
-                            )}
-                          </tr>
-                        ))}
-
-                        {/* แถวรวมทั้ง group */}
-                        <tr className="bg-gray-50 border-b-2 border-gray-300">
-                          <td className="px-4 py-2.5" />
-                          <td className="px-4 py-2.5 text-center font-semibold text-gray-700">
-                            รวม
-                          </td>
-                          <td className="px-4 py-2.5 text-right font-semibold text-gray-800 tabular-nums">
-                            {groupTotalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </td>
-                          <td className="px-4 py-2.5 text-right tabular-nums font-semibold">
-                            {groupTotalDepositUsed > 0 ? (
-                              <span className="text-red-600">
-                                -{groupTotalDepositUsed.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </span>
-                            ) : (
-                              <span className="text-gray-400">-</span>
-                            )}
-                          </td>
-                          <td className={`px-4 py-2.5 text-right font-semibold tabular-nums ${groupRunningDeposit < 0 ? 'text-red-600' : 'text-gray-700'
-                            }`}>
-                            {groupRunningDeposit !== 0
-                              ? groupRunningDeposit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                              : '-'
-                            }
-                          </td>
-                          {showCommission && (
-                            <td className="px-4 py-2.5 text-right font-semibold tabular-nums text-purple-700 bg-purple-50/30">
-                              {groupTotalCommission > 0
-                                ? groupTotalCommission.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                                : '-'
-                              }
-                            </td>
+          {paymentRows.length === 0 ? (
+            <div className="px-6 py-16 text-center">
+              <div className="flex flex-col items-center justify-center text-gray-400">
+                <Wallet className="w-12 h-12 mb-4 opacity-50" />
+                <p className="text-lg font-medium text-gray-500">ยังไม่มีข้อมูลค่าใช้จ่ายในเดือนนี้</p>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Desktop: Table */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-600 border-b border-gray-200 text-xs w-10">#</th>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-600 border-b border-gray-200 text-xs" style={{ minWidth: 180 }}>
+                        ชื่อ-นามสกุล (ชื่อเล่น)
+                      </th>
+                      <th className="px-4 py-3 text-center font-semibold text-gray-600 border-b border-gray-200 text-xs" style={{ minWidth: 90 }}>
+                        วันที่
+                      </th>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-600 border-b border-gray-200 text-xs" style={{ minWidth: 200 }}>
+                        รายการ
+                      </th>
+                      <th className="px-4 py-3 text-right font-semibold text-gray-600 border-b border-gray-200 text-xs" style={{ minWidth: 110 }}>
+                        ยอดรวม
+                      </th>
+                      <th className="px-4 py-3 text-right font-semibold text-gray-600 border-b border-gray-200 text-xs" style={{ minWidth: 110 }}>
+                        ใช้มัดจำ
+                      </th>
+                      <th className="px-4 py-3 text-right font-semibold text-gray-600 border-b border-gray-200 text-xs" style={{ minWidth: 110 }}>
+                        ยอดชำระ
+                      </th>
+                      <th className="px-4 py-3 text-center font-semibold text-gray-600 border-b border-gray-200 text-xs" style={{ minWidth: 110 }}>
+                        ช่องทาง
+                      </th>
+                      <th className="px-4 py-3 text-right font-semibold text-gray-600 border-b border-gray-200 text-xs" style={{ minWidth: 110 }}>
+                        ค่าธรรมเนียม
+                      </th>
+                      <th className="px-4 py-3 text-right font-semibold text-emerald-700 border-b border-gray-200 bg-emerald-50/50 text-xs" style={{ minWidth: 120 }}>
+                        ยอดสุทธิ
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paymentRows.map((row, i) => (
+                      <tr key={row.id} className="border-b border-gray-100 hover:bg-gray-50">
+                        <td className="px-4 py-2.5 text-gray-400 text-xs">{i + 1}</td>
+                        <td className="px-4 py-2.5 font-medium text-gray-800">
+                          {row.name}
+                          {row.nickname && (
+                            <span className="text-gray-500 font-normal"> ({row.nickname})</span>
                           )}
-                        </tr>
-                      </React.Fragment>
-                    );
-                  })
-                )}
-              </tbody>
-              {statistics.patientGroups.length > 1 && (
-                <tfoot>
-                  <tr className="bg-emerald-50 border-t-2 border-emerald-300">
-                    <td className="px-5 py-3 font-bold text-emerald-800">
-                      รวมทั้งหมด ({statistics.arrivedPatients} คน)
-                    </td>
-                    <td className="px-4 py-3" />
-                    <td className="px-4 py-3" />
-                    <td className="px-4 py-3 text-right font-bold text-emerald-800 tabular-nums">
-                      {statistics.arrivedLeads.reduce((sum, lead) => {
-                        return sum + lead.procedures.reduce((s, p) => s + (parseFloat(p.price) || 0), 0);
-                      }, 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </td>
-                    <td className="px-4 py-3" />
-                    <td className="px-4 py-3" />
-                    {showCommission && (
-                      <td className="px-4 py-3 text-right font-bold tabular-nums text-purple-800 bg-purple-50/30">
+                        </td>
+                        <td className="px-4 py-2.5 text-center text-gray-600 text-xs">{row.date}</td>
+                        <td className="px-4 py-2.5 text-gray-700 text-xs">{row.procedures}</td>
+                        <td className="px-4 py-2.5 text-right tabular-nums text-gray-700">
+                          {row.proceduresTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-4 py-2.5 text-right tabular-nums">
+                          {row.depositUsed > 0 ? (
+                            <span className="text-red-600 font-medium">
+                              -{row.depositUsed.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2.5 text-right tabular-nums font-medium text-gray-800">
+                          {row.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-4 py-2.5 text-center">
+                          <span className="inline-flex px-2 py-0.5 bg-blue-50 text-blue-700 text-[11px] rounded-full border border-blue-200">
+                            {row.methodLabel}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5 text-right tabular-nums">
+                          {row.serviceCharge > 0 ? (
+                            <span className="text-red-600">
+                              -{row.serviceCharge.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2.5 text-right tabular-nums font-semibold text-emerald-700 bg-emerald-50/30">
+                          {row.netAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-emerald-50 border-t-2 border-emerald-300">
+                      <td className="px-4 py-3" />
+                      <td className="px-4 py-3 font-bold text-emerald-800" colSpan={3}>
+                        รวมทั้งหมด ({paymentRows.length} รายการ)
+                      </td>
+                      <td className="px-4 py-3 text-right font-bold text-gray-800 tabular-nums">
+                        {paymentRows.reduce((s, r) => s + r.proceduresTotal, 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td className="px-4 py-3 text-right font-bold text-red-600 tabular-nums">
                         {(() => {
-                          const total = statistics.arrivedLeads.reduce((sum, lead) => {
-                            return sum + (lead.payments?.commission?.totalAmount || 0);
-                          }, 0);
+                          const total = paymentRows.reduce((s, r) => s + r.depositUsed, 0);
                           return total > 0
-                            ? total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                            ? `-${total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                             : '-';
                         })()}
                       </td>
+                      <td className="px-4 py-3 text-right font-bold text-gray-800 tabular-nums">
+                        {finance.totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td className="px-4 py-3" />
+                      <td className="px-4 py-3 text-right font-bold text-red-600 tabular-nums">
+                        {finance.totalServiceCharge > 0
+                          ? `-${finance.totalServiceCharge.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                          : '-'}
+                      </td>
+                      <td className="px-4 py-3 text-right font-bold text-emerald-800 tabular-nums bg-emerald-50">
+                        {finance.totalNetRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              {/* Mobile: Cards */}
+              <div className="md:hidden divide-y divide-gray-100">
+                {paymentRows.map((row, i) => (
+                  <div key={row.id} className="px-4 py-3">
+                    <div className="flex items-start justify-between mb-1.5">
+                      <div>
+                        <span className="text-xs text-gray-400 mr-2">{i + 1}.</span>
+                        <span className="font-medium text-gray-800">{row.name}</span>
+                        {row.nickname && <span className="text-gray-500 text-sm"> ({row.nickname})</span>}
+                      </div>
+                      <span className="text-[11px] text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
+                        {row.date}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-600 mb-2">{row.procedures}</p>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="flex justify-between bg-gray-50 rounded px-2 py-1">
+                        <span className="text-gray-500">ยอดรวม</span>
+                        <span className="tabular-nums text-gray-800">
+                          {row.proceduresTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                      {row.depositUsed > 0 && (
+                        <div className="flex justify-between bg-gray-50 rounded px-2 py-1">
+                          <span className="text-gray-500">ใช้มัดจำ</span>
+                          <span className="tabular-nums text-red-600">
+                            -{row.depositUsed.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      )}
+                      <div className="flex justify-between bg-gray-50 rounded px-2 py-1">
+                        <span className="text-gray-500">ยอดชำระ</span>
+                        <span className="tabular-nums text-gray-800 font-medium">
+                          {row.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                      <div className="flex justify-between bg-blue-50 rounded px-2 py-1">
+                        <span className="text-gray-500">ช่องทาง</span>
+                        <span className="text-blue-700 font-medium">{row.methodLabel}</span>
+                      </div>
+                      {row.serviceCharge > 0 && (
+                        <div className="flex justify-between bg-gray-50 rounded px-2 py-1 col-span-2">
+                          <span className="text-gray-500">ค่าธรรมเนียม</span>
+                          <span className="tabular-nums text-red-600">
+                            -{row.serviceCharge.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      )}
+                      <div className="flex justify-between bg-emerald-50 rounded px-2 py-1.5 col-span-2 border border-emerald-200">
+                        <span className="text-emerald-700 font-semibold">ยอดสุทธิ</span>
+                        <span className="tabular-nums text-emerald-700 font-bold">
+                          {row.netAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                {/* Mobile total */}
+                <div className="px-4 py-3 bg-emerald-50 border-t-2 border-emerald-300">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-sm font-bold text-emerald-800">รวมทั้งหมด ({paymentRows.length} รายการ)</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">ยอดชำระรวม</span>
+                      <span className="tabular-nums font-bold text-gray-800">
+                        {finance.totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    {finance.totalServiceCharge > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">ค่าธรรมเนียมรวม</span>
+                        <span className="tabular-nums font-bold text-red-600">
+                          -{finance.totalServiceCharge.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
                     )}
-                  </tr>
-                </tfoot>
-              )}
-            </table>
-          </div>
+                    <div className="flex justify-between col-span-2 pt-1 border-t border-emerald-300">
+                      <span className="text-emerald-800 font-bold">ยอดสุทธิรวม</span>
+                      <span className="tabular-nums font-bold text-emerald-800">
+                        {finance.totalNetRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

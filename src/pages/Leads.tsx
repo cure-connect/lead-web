@@ -100,6 +100,8 @@ const LeadsPage: React.FC = () => {
             : "ยังไม่นัด",
           note: item.note || "",
           arrivedNote: item.arrivedNote || "",
+          rescheduledNote: item.rescheduledNote || "",
+          cancelledNote: item.cancelledNote || "",
           payments: item.payments,
           procedures: Array.isArray(item.procedures) ? item.procedures : [],
           deposit: item.deposit ? {
@@ -283,7 +285,6 @@ const LeadsPage: React.FC = () => {
       <ToastContainer toasts={toasts} onClose={removeToast} />
       <div className="min-h-screen bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-2 pb-28 sm:pb-8 sm:pt-8">
-          <p className="hidden sm:block text-gray-600 mb-6">รายชื่อลูกค้าที่ลงข้อมูลและการติดตาม</p>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-6 mb-4 sm:mb-8">
             <SummaryBox
@@ -1039,14 +1040,12 @@ const StatusModal = ({
     Array<{
       name: string;
       price: string;
-      commissionRate: number;
       depositUsed: string;
     }>
-  >([{ name: "", price: "0", commissionRate: 0, depositUsed: "0" }]);
+  >([{ name: "", price: "0", depositUsed: "0" }]);
 
   const [paymentMethod, setPaymentMethod] = useState("");
   const [serviceChargeRate, setServiceChargeRate] = useState<number>(3);
-  const [commissionEnabled, setCommissionEnabled] = useState(false);
 
   const [nextAppointmentEnabled, setNextAppointmentEnabled] = useState(false);
   const [nextAppointmentDate, setNextAppointmentDate] = useState("");
@@ -1059,6 +1058,8 @@ const StatusModal = ({
   const [receiptUrls, setReceiptUrls] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [appointmentNote, setAppointmentNote] = useState(lead.arrivedNote || "");
+  const [rescheduleNote, setRescheduleNote] = useState(lead.rescheduledNote || "");
+  const [cancelNote, setCancelNote] = useState(lead.cancelledNote || "");
 
   // Patient wallet balance
   const [patientBalance, setPatientBalance] = useState<number>(0);
@@ -1124,7 +1125,6 @@ const StatusModal = ({
           lead.procedures.map((p: any) => ({
             name: p.name || "",
             price: String(p.price || 0),
-            commissionRate: p.commissionRate || 0,
             depositUsed: String(p.depositUsed || 0),
           }))
         );
@@ -1136,10 +1136,6 @@ const StatusModal = ({
 
       if (lead.payments?.serviceCharge?.rate) {
         setServiceChargeRate(lead.payments.serviceCharge.rate);
-      }
-
-      if (lead.payments?.commission && lead.payments.commission.totalAmount > 0) {
-        setCommissionEnabled(true);
       }
 
       if ((lead.receiptUrls?.length ?? 0) > 0) {
@@ -1168,31 +1164,10 @@ const StatusModal = ({
 
   const netAmount = totalAmount - serviceChargeAmount;
 
-  const commissionDetails = commissionEnabled
-    ? procedures
-      .filter((p) => p.name && parseFloat(p.price) > 0 && p.commissionRate > 0)
-      .map((p) => {
-        const price = parseFloat(p.price) || 0;
-        const baseAmount =
-          paymentMethod === "card"
-            ? price - Math.round((price * serviceChargeRate) / 100 * 100) / 100
-            : price;
-        const commAmount = Math.round((baseAmount * p.commissionRate) / 100 * 100) / 100;
-        return {
-          procedureName: p.name,
-          baseAmount,
-          rate: p.commissionRate,
-          amount: commAmount,
-        };
-      })
-    : [];
-
-  const totalCommission = commissionDetails.reduce((sum, d) => sum + d.amount, 0);
-
   const addProcedure = () => {
     setProcedures([
       ...procedures,
-      { name: "", price: "0", commissionRate: 0, depositUsed: "0" },
+      { name: "", price: "0", depositUsed: "0" },
     ]);
   };
 
@@ -1258,6 +1233,20 @@ const StatusModal = ({
         }
       }
 
+      if (selectedStatus === "rescheduled") {
+        if (!newAppointmentDate || !newAppointmentTime) {
+          setValidationError("กรุณาเลือกวันและเวลานัดใหม่");
+          return;
+        }
+      }
+
+      if (selectedStatus === "cancelled") {
+        if (!cancelNote.trim()) {
+          setValidationError("กรุณาระบุเหตุผลการยกเลิกนัด");
+          return;
+        }
+      }
+
       setIsSaving(true);
 
       const totalAmount = validProcedures.reduce(
@@ -1292,31 +1281,8 @@ const StatusModal = ({
             };
           }
 
-          if (commissionEnabled) {
-            const details = validProcedures
-              .filter((p) => p.commissionRate > 0)
-              .map((p) => {
-                const price = parseFloat(p.price) || 0;
-                const base =
-                  paymentMethod === "card"
-                    ? price - Math.round((price * scRate) / 100 * 100) / 100
-                    : price;
-                const commAmt = Math.round((base * p.commissionRate) / 100 * 100) / 100;
-                return {
-                  procedureName: p.name,
-                  baseAmount: base,
-                  rate: p.commissionRate,
-                  amount: commAmt,
-                };
-              });
-
-            if (details.length > 0) {
-              payments.commission = {
-                totalAmount: details.reduce((s, d) => s + d.amount, 0),
-                details,
-              };
-            }
-          }
+          // เคลียร์ค่าคอมเก่าออกถ้ามี (เผื่อ lead เคยมี commission อยู่ก่อน)
+          payments.commission = null;
         }
       }
 
@@ -1329,9 +1295,6 @@ const StatusModal = ({
             name: p.name,
             price: p.price,
             ...(parseFloat(p.depositUsed) > 0 ? { depositUsed: parseFloat(p.depositUsed) } : {}),
-            ...(commissionEnabled && p.commissionRate > 0
-              ? { commissionRate: p.commissionRate }
-              : {}),
           }))
         } : {}),
         ...(payments ? { payments } : {}),
@@ -1359,13 +1322,11 @@ const StatusModal = ({
             ? `${lead.appointmentDate}T${lead.appointmentTime}:00+07:00`
             : new Date().toISOString();
       } else if (selectedStatus === "rescheduled") {
-        if (!newAppointmentDate || !newAppointmentTime) {
-          setValidationError("กรุณาเลือกวันและเวลานัดใหม่");
-          return;
-        }
         payload.appointments.date = `${newAppointmentDate}T${newAppointmentTime}:00+07:00`;
+        payload.rescheduledNote = rescheduleNote.trim();
       } else if (selectedStatus === "cancelled") {
         payload.appointments.date = new Date().toISOString();
+        payload.cancelledNote = cancelNote.trim();
       }
 
       await api.patch(`/${lead.id}`, payload);
@@ -1653,27 +1614,6 @@ const StatusModal = ({
                       />
                     </div>
 
-                    {commissionEnabled && (
-                      <div className="w-28">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">ค่าคอม (%)</label>
-                        <div className="relative">
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            step="0.1"
-                            value={procedure.commissionRate || ""}
-                            placeholder="0"
-                            onChange={(e) =>
-                              updateProcedure(index, "commissionRate", parseFloat(e.target.value) || 0)
-                            }
-                            className="w-full px-3 py-2 pr-8 border border-gray-200 rounded-md text-right bg-white"
-                          />
-                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">%</span>
-                        </div>
-                      </div>
-                    )}
-
                     {patientBalance > 0 && (
                       <div className="w-16 text-center">
                         <label className="block text-sm font-medium text-blue-600 mb-1">มัดจำ</label>
@@ -1718,21 +1658,6 @@ const StatusModal = ({
                       </button>
                     )}
                   </div>
-
-                  {commissionEnabled && procedure.commissionRate > 0 && parseFloat(procedure.price) > 0 && (
-                    <div className="flex items-center gap-1 pl-1">
-                      <span className="text-xs text-purple-600 font-medium">
-                        ค่าคอม = {(() => {
-                          const price = parseFloat(procedure.price) || 0;
-                          const base =
-                            paymentMethod === "card"
-                              ? price - Math.round((price * serviceChargeRate) / 100 * 100) / 100
-                              : price;
-                          return Math.round((base * procedure.commissionRate) / 100 * 100) / 100;
-                        })().toLocaleString()} บาท
-                      </span>
-                    </div>
-                  )}
                 </div>
               ))}
 
@@ -1743,58 +1668,6 @@ const StatusModal = ({
                 <Plus className="w-4 h-4" />
                 เพิ่มหัตถการ
               </button>
-
-              <div className="border border-gray-200 rounded-lg p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-sm font-medium text-gray-700">ค่าคอมมิชชั่น</span>
-                    <p className="text-xs text-gray-400 mt-0.5">เปิดเพื่อใส่ % ค่าคอมในแต่ละหัตถการ</p>
-                  </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={commissionEnabled}
-                    onClick={() => {
-                      const next = !commissionEnabled;
-                      setCommissionEnabled(next);
-                      if (!next) {
-                        setProcedures((prev) =>
-                          prev.map((p) => ({ ...p, commissionRate: 0 }))
-                        );
-                      }
-                    }}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${commissionEnabled ? "bg-[#1479FF]" : "bg-gray-200"
-                      }`}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${commissionEnabled ? "translate-x-6" : "translate-x-1"
-                        }`}
-                    />
-                  </button>
-                </div>
-
-                {commissionEnabled && totalCommission > 0 && (
-                  <div className="mt-4 pt-3 border-t border-gray-100 space-y-2">
-                    {commissionDetails.map((d, i) => (
-                      <div key={i} className="flex justify-between text-sm">
-                        <span className="text-gray-600">
-                          {d.procedureName} ({d.rate}%
-                          {paymentMethod === "card" ? ` จาก ${d.baseAmount.toLocaleString()} บาท` : ""})
-                        </span>
-                        <span className="font-medium text-purple-600">
-                          {d.amount.toLocaleString()} บาท
-                        </span>
-                      </div>
-                    ))}
-                    <div className="flex justify-between items-center pt-2 border-t border-purple-200">
-                      <span className="text-sm font-semibold text-gray-800">รวมค่าคอมมิชชั่น</span>
-                      <span className="text-lg font-bold text-purple-600">
-                        {totalCommission.toLocaleString()} บาท
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </div>
 
               <div className="flex justify-between items-center bg-indigo-50 px-4 py-3 rounded-lg">
                 <span className="text-sm font-medium">ยอดรวม</span>
@@ -1897,13 +1770,6 @@ const StatusModal = ({
                     </div>
 
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">ค่าคอมมิชชัน</span>
-                      <span className={`font-medium ${totalCommission > 0 ? 'text-purple-600' : 'text-gray-500'}`}>
-                        {totalCommission > 0 ? totalCommission.toLocaleString() : '0'} บาท
-                      </span>
-                    </div>
-
-                    <div className="flex justify-between text-sm">
                       <span className="text-gray-600">เงินมัดจำที่ใช้</span>
                       <span className={`font-medium ${totalDepositUsed > 0 ? 'text-blue-600' : 'text-gray-500'}`}>
                         {totalDepositUsed > 0 ? `-${totalDepositUsed.toLocaleString()}` : '0'} บาท
@@ -1914,7 +1780,7 @@ const StatusModal = ({
                       <div className="flex justify-between items-center bg-green-50 -mx-5 px-5 py-3 rounded-b-xl -mb-5 border-t border-green-200">
                         <span className="text-sm font-semibold text-gray-800">ยอดสุทธิที่คลินิกได้รับ</span>
                         <span className="text-xl font-bold text-green-600">
-                          {(totalAmount - serviceChargeAmount - totalCommission).toLocaleString()} บาท
+                          {(totalAmount - serviceChargeAmount).toLocaleString()} บาท
                         </span>
                       </div>
                     </div>
@@ -2072,6 +1938,44 @@ const StatusModal = ({
                     `}
                   />
                 </div>
+              </div>
+
+              {/* หมายเหตุการเลื่อนนัด */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  หมายเหตุการเลื่อนนัด
+                </label>
+                <textarea
+                  value={rescheduleNote}
+                  onChange={(e) => setRescheduleNote(e.target.value)}
+                  placeholder="เหตุผลการเลื่อนนัด เช่น คนไข้ติดธุระ..."
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 bg-white resize-none"
+                />
+              </div>
+            </div>
+          )}
+
+          {selectedStatus === "cancelled" && (
+            <div className="space-y-5 mt-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  เหตุผลการยกเลิกนัด <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={cancelNote}
+                  onChange={(e) => {
+                    setCancelNote(e.target.value);
+                    if (validationError) setValidationError("");
+                  }}
+                  placeholder="ระบุเหตุผลที่ยกเลิกนัด..."
+                  rows={4}
+                  required
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-red-500 focus:border-red-500 bg-white resize-none"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  จำเป็นต้องระบุเหตุผลก่อนยืนยันการยกเลิก
+                </p>
               </div>
             </div>
           )}
@@ -2291,26 +2195,6 @@ const ViewLeadModal = ({
                     </div>
                   )}
 
-                  {lead.payments.commission && lead.payments.commission.totalAmount > 0 && (
-                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 space-y-2">
-                      <p className="text-xs font-semibold text-purple-700">ค่าคอมมิชชั่น</p>
-                      <div className="space-y-1 text-xs sm:text-sm">
-                        {lead.payments.commission.details?.map((d, i) => (
-                          <div key={i} className="flex justify-between">
-                            <span className="text-gray-600 truncate mr-2">
-                              {d.procedureName} ({d.rate}%)
-                            </span>
-                            <span className="font-medium text-purple-600 whitespace-nowrap">{d.amount?.toLocaleString()} บาท</span>
-                          </div>
-                        ))}
-                        <div className="flex justify-between pt-1 border-t border-purple-200">
-                          <span className="font-semibold text-gray-800">รวม</span>
-                          <span className="font-bold text-purple-600">{lead.payments.commission.totalAmount?.toLocaleString()} บาท</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
                   {((lead.receiptUrls?.length ?? 0) > 0 || lead.receiptUrl) && (
                     <div className="mt-3">
                       <label className="text-xs font-medium text-gray-500 block mb-2">ใบเสร็จ / หลักฐานการรับชำระ</label>
@@ -2353,6 +2237,26 @@ const ViewLeadModal = ({
                 หมายเหตุ
               </h3>
               <p className="text-sm text-gray-700 whitespace-pre-wrap bg-white rounded-lg p-3">{lead.note}</p>
+            </div>
+          )}
+
+          {lead.rescheduledNote && (
+            <div className="bg-amber-50 rounded-xl p-4 space-y-2">
+              <h3 className="text-sm font-semibold text-amber-700 flex items-center gap-2">
+                <span className="w-1.5 h-1.5 bg-amber-500 rounded-full"></span>
+                หมายเหตุการเลื่อนนัด
+              </h3>
+              <p className="text-sm text-gray-700 whitespace-pre-wrap bg-white rounded-lg p-3">{lead.rescheduledNote}</p>
+            </div>
+          )}
+
+          {lead.cancelledNote && (
+            <div className="bg-red-50 rounded-xl p-4 space-y-2">
+              <h3 className="text-sm font-semibold text-red-700 flex items-center gap-2">
+                <span className="w-1.5 h-1.5 bg-red-500 rounded-full"></span>
+                เหตุผลการยกเลิกนัด
+              </h3>
+              <p className="text-sm text-gray-700 whitespace-pre-wrap bg-white rounded-lg p-3">{lead.cancelledNote}</p>
             </div>
           )}
         </div>
