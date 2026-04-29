@@ -455,7 +455,7 @@ const LeadsPage: React.FC = () => {
                     {activeTab === "cancelled" && (
                       <>
                         <th className="px-6 py-4 text-left font-semibold">วันที่นัดเดิม</th>
-                        <th className="px-6 py-4 text-left font-semibold">เหตุผลการยกเลิก</th>
+                        <th className="px-6 py-4 text-left font-semibold">หมายเหตุ</th>
                         <th className="px-6 py-4 text-left font-semibold">แอดมิน</th>
                       </>
                     )}
