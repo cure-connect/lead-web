@@ -43,6 +43,8 @@ const getDaysUntilAppointment = (appointmentDate: string) => {
 };
 
 const isLeadLocked = (lead: Lead): boolean => {
+  if (lead.status === "cancelled") return true;
+
   const hasArrivedStatus = lead.status === "arrived";
   const hasProcedures = Array.isArray(lead.procedures) && lead.procedures.length > 0;
   const hasPayment = !!(lead.payments && lead.payments.method);
@@ -51,7 +53,7 @@ const isLeadLocked = (lead: Lead): boolean => {
 };
 
 const LeadsPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<"notScheduled" | "scheduled" | "arrived">("notScheduled");
+  const [activeTab, setActiveTab] = useState<"notScheduled" | "scheduled" | "arrived" | "cancelled">("notScheduled");
   const [selectedYear, setSelectedYear] = useState(
     new Date().getFullYear().toString()
   );
@@ -142,9 +144,11 @@ const LeadsPage: React.FC = () => {
       if (activeTab === "notScheduled") {
         matchesTab = lead.status === "pending";
       } else if (activeTab === "scheduled") {
-        matchesTab = ["scheduled", "rescheduled", "cancelled"].includes(lead.status);
+        matchesTab = ["scheduled", "rescheduled"].includes(lead.status);
       } else if (activeTab === "arrived") {
         matchesTab = lead.status === "arrived";
+      } else if (activeTab === "cancelled") {
+        matchesTab = lead.status === "cancelled";
       }
 
       return matchesSearch && matchesTab;
@@ -161,6 +165,12 @@ const LeadsPage: React.FC = () => {
         return dateA - dateB;
       });
     } else if (activeTab === "arrived") {
+      filtered.sort((a, b) => {
+        const dateA = a.appointmentDate ? new Date(a.appointmentDate).getTime() : 0;
+        const dateB = b.appointmentDate ? new Date(b.appointmentDate).getTime() : 0;
+        return dateB - dateA;
+      });
+    } else if (activeTab === "cancelled") {
       filtered.sort((a, b) => {
         const dateA = a.appointmentDate ? new Date(a.appointmentDate).getTime() : 0;
         const dateB = b.appointmentDate ? new Date(b.appointmentDate).getTime() : 0;
@@ -352,6 +362,15 @@ const LeadsPage: React.FC = () => {
                 >
                   มาแล้ว
                 </button>
+                <button
+                  onClick={() => setActiveTab("cancelled")}
+                  className={`py-3 sm:py-4 px-3 sm:px-6 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "cancelled"
+                    ? "border-indigo-600 text-indigo-600"
+                    : "border-transparent text-gray-500 hover:text-gray-700"
+                    }`}
+                >
+                  ยกเลิกนัด
+                </button>
               </div>
             </div>
 
@@ -433,6 +452,14 @@ const LeadsPage: React.FC = () => {
                       </>
                     )}
 
+                    {activeTab === "cancelled" && (
+                      <>
+                        <th className="px-6 py-4 text-left font-semibold">วันที่นัดเดิม</th>
+                        <th className="px-6 py-4 text-left font-semibold">เหตุผลการยกเลิก</th>
+                        <th className="px-6 py-4 text-left font-semibold">แอดมิน</th>
+                      </>
+                    )}
+
                     <th className="px-6 py-4 text-center font-semibold">จัดการ</th>
                   </tr>
                 </thead>
@@ -440,7 +467,7 @@ const LeadsPage: React.FC = () => {
                 <tbody className="border-t">
                   {filteredLeads.length === 0 ? (
                     <tr>
-                      <td colSpan={activeTab === "scheduled" ? 8 : activeTab === "arrived" ? 7 : 5} className="px-6 py-16 text-center">
+                      <td colSpan={activeTab === "scheduled" ? 8 : activeTab === "arrived" ? 7 : activeTab === "cancelled" ? 5 : 5} className="px-6 py-16 text-center">
                         <div className="flex flex-col items-center justify-center text-gray-400">
                           <Users className="w-12 h-12 mb-4 opacity-50" />
                           <p className="text-lg font-medium text-gray-500">ยังไม่มีข้อมูล</p>
@@ -580,6 +607,28 @@ const LeadsPage: React.FC = () => {
                           </>
                         )}
 
+                        {activeTab === "cancelled" && (
+                          <>
+                            <td className="px-6 py-4 text-gray-700">
+                              {lead.appointmentDateDisplay || "-"}
+                            </td>
+
+                            <td className="px-6 py-4 text-gray-600 max-w-xs">
+                              {lead.cancelledNote ? (
+                                <span className="text-red-600 line-clamp-2 whitespace-pre-wrap">
+                                  {lead.cancelledNote}
+                                </span>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </td>
+
+                            <td className="px-6 py-4 text-gray-600">
+                              {lead.admin || "-"}
+                            </td>
+                          </>
+                        )}
+
                         <td className="px-6 py-4 text-center">
                           <div className="flex justify-center gap-4">
                             <Eye
@@ -669,6 +718,12 @@ const LeadsPage: React.FC = () => {
                             <ChevronRight className="w-3 h-3" />
                           </button>
                         )}
+
+                        {activeTab === "cancelled" && (
+                          <span className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-full ml-2 shrink-0 bg-red-100 text-red-700">
+                            {statusLabel[lead.status]}
+                          </span>
+                        )}
                       </div>
 
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500 mb-3">
@@ -720,6 +775,13 @@ const LeadsPage: React.FC = () => {
                           </>
                         )}
 
+                        {activeTab === "cancelled" && (
+                          <span className="flex items-center gap-1">
+                            <CalendarCheck className="w-3.5 h-3.5" />
+                            นัดเดิม: {lead.appointmentDateDisplay || "-"}
+                          </span>
+                        )}
+
                         <span className="flex items-center gap-1">
                           <User className="w-3.5 h-3.5" />
                           {lead.admin || "-"}
@@ -730,6 +792,13 @@ const LeadsPage: React.FC = () => {
                         <div className="text-xs text-gray-600 mb-3">
                           <span className="text-gray-400">หัตถการ:</span>{" "}
                           {lead.interest.map((i: any) => i.name || i).join(", ")}
+                        </div>
+                      )}
+
+                      {activeTab === "cancelled" && lead.cancelledNote && (
+                        <div className="text-xs mb-3 bg-red-50 rounded-md p-2">
+                          <span className="text-red-500 font-medium">เหตุผล:</span>{" "}
+                          <span className="text-red-700 whitespace-pre-wrap">{lead.cancelledNote}</span>
                         </div>
                       )}
 
@@ -1484,14 +1553,10 @@ const StatusModal = ({
                   <div>
                     <span className="text-xs text-gray-500">วันเวลานัดหมาย</span>
                     <p className="text-sm font-semibold text-indigo-700">
-                      {new Date(lead.appointmentDate).toLocaleDateString("th-TH", {
-                        weekday: "long",
-                        year: "numeric",
-                        month: "long",
-                        day: "numeric",
-                      })}
-                      {lead.appointmentTime ? ` เวลา ${lead.appointmentTime} น.` :
-                        ` เวลา ${new Date(lead.appointmentDate).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น.`}
+                      {formatDate(lead.appointmentDate)}
+                      {lead.appointmentTime
+                        ? ` เวลา ${lead.appointmentTime} น.`
+                        : ` เวลา ${String(new Date(lead.appointmentDate).getHours()).padStart(2, "0")}:${String(new Date(lead.appointmentDate).getMinutes()).padStart(2, "0")} น.`}
                     </p>
                   </div>
                 </div>
