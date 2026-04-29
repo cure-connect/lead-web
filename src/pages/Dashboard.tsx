@@ -90,8 +90,6 @@ interface NewPatient {
 const DashboardPage: React.FC = () => {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [newPatients, setNewPatients] = useState<NewPatient[]>([]);
-  const [newPatientInterests, setNewPatientInterests] = useState<Record<string, number>>({});
-  const [newPatientChannels, setNewPatientChannels] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [newPatientPage, setNewPatientPage] = useState(1);
   const NEW_PATIENT_PER_PAGE = 10;
@@ -156,35 +154,23 @@ const DashboardPage: React.FC = () => {
         const res = await api.get("/patient");
         const patients = Array.isArray(res.data?.data) ? res.data.data : [];
 
-        const newPats: NewPatient[] = patients
-          .filter((p: any) => p.createdAt?.startsWith(monthPrefix))
-          .map((p: any) => ({
-            _id: p._id,
-            fullname: p.fullname || '',
-            nickname: p.nickname || '',
-            tel: p.tel || '',
-            interest: p.interest || '',
-            referralChannel: p.referralChannel || '',
-            branch: p.branch || '',
-            createdBy: p.createdBy || '',
-            createdAt: p.createdAt,
-          }));
+        // ดึงข้อมูลคนไข้ทั้งหมด (ไม่ filter ตาม createdAt)
+        // การ filter ตามเดือนจะถูกย้ายไปอยู่ใน useMemo (enrichedNewPatients)
+        // เพื่อให้สามารถจัดเดือนตาม "วันที่นัดหมายแรก" จาก leads ได้
+        const allPats: NewPatient[] = patients.map((p: any) => ({
+          _id: p._id,
+          fullname: p.fullname || '',
+          nickname: p.nickname || '',
+          tel: p.tel || '',
+          interest: p.interest || '',
+          referralChannel: p.referralChannel || '',
+          branch: p.branch || '',
+          createdBy: p.createdBy || '',
+          createdAt: p.createdAt,
+        }));
 
-        setNewPatients(newPats);
+        setNewPatients(allPats);
         setNewPatientPage(1);
-
-        const interests: Record<string, number> = {};
-        const channels: Record<string, number> = {};
-        newPats.forEach((p) => {
-          if (p.interest) {
-            interests[p.interest] = (interests[p.interest] || 0) + 1;
-          }
-          if (p.referralChannel) {
-            channels[p.referralChannel] = (channels[p.referralChannel] || 0) + 1;
-          }
-        });
-        setNewPatientInterests(interests);
-        setNewPatientChannels(channels);
       } catch (error) {
         console.error('Fetch patients failed', error);
       }
@@ -243,19 +229,63 @@ const DashboardPage: React.FC = () => {
     };
   }, [leads, monthPrefix]);
 
-  // จับคู่คนไข้ใหม่กับวันที่นัดหมายจาก leads
+  // จับคู่คนไข้ใหม่กับวันนัดหมายแรกจาก leads และจัดเดือนตามวันนัดหมาย
+  // - ถ้าคนไข้มีนัดหมาย → จัดเป็นคนไข้ใหม่ของเดือน "วันนัดหมายแรก"
+  // - ถ้าคนไข้ยังไม่มีนัดหมาย → จัดเป็นคนไข้ใหม่ของเดือน "วันที่สร้างข้อมูล" (fallback)
+  // เช่น สร้าง lead เดือน 4 แต่นัดเดือน 5 → จะแสดงเป็นคนไข้ของเดือน 5
   const enrichedNewPatients = useMemo(() => {
-    if (newPatients.length === 0 || leads.length === 0) return newPatients;
-    return newPatients.map((p) => {
-      const patientLeads = leads
-        .filter((l) => l.patientId === p._id && l.appointmentDate)
-        .sort((a, b) => new Date(a.appointmentDate!).getTime() - new Date(b.appointmentDate!).getTime());
-      return {
-        ...p,
-        appointmentDate: patientLeads[0]?.appointmentDate || undefined,
-      };
+    if (newPatients.length === 0) return [];
+
+    return newPatients
+      .map((p) => {
+        const patientLeads = leads
+          .filter((l) => l.patientId === p._id && l.appointmentDate)
+          .sort(
+            (a, b) =>
+              new Date(a.appointmentDate!).getTime() -
+              new Date(b.appointmentDate!).getTime()
+          );
+        const firstAppointment = patientLeads[0]?.appointmentDate;
+        return {
+          ...p,
+          appointmentDate: firstAppointment || undefined,
+        };
+      })
+      .filter((p) => {
+        // ถ้ามีนัด → ใช้เดือนของนัดหมาย
+        // ถ้าไม่มีนัด → ใช้เดือนของวันที่สร้างข้อมูล
+        const referenceDate = p.appointmentDate || p.createdAt;
+        return referenceDate?.startsWith(monthPrefix);
+      })
+      .sort((a, b) => {
+        // เรียงจากวันนัดหมายล่าสุด → เก่าสุด
+        // ถ้าไม่มีนัด ใช้ createdAt แทน (key เดียวกับตอน filter)
+        const dateA = a.appointmentDate || a.createdAt;
+        const dateB = b.appointmentDate || b.createdAt;
+        return new Date(dateB).getTime() - new Date(dateA).getTime();
+      });
+  }, [newPatients, leads, monthPrefix]);
+
+  // คำนวณสรุปหัตถการที่สนใจ + ช่องทางที่รู้จัก จากคนไข้ใหม่ของเดือนนี้
+  const newPatientInterests = useMemo(() => {
+    const interests: Record<string, number> = {};
+    enrichedNewPatients.forEach((p) => {
+      if (p.interest) {
+        interests[p.interest] = (interests[p.interest] || 0) + 1;
+      }
     });
-  }, [newPatients, leads]);
+    return interests;
+  }, [enrichedNewPatients]);
+
+  const newPatientChannels = useMemo(() => {
+    const channels: Record<string, number> = {};
+    enrichedNewPatients.forEach((p) => {
+      if (p.referralChannel) {
+        channels[p.referralChannel] = (channels[p.referralChannel] || 0) + 1;
+      }
+    });
+    return channels;
+  }, [enrichedNewPatients]);
 
   // สรุปค่าใช้จ่าย: 1 row = 1 visit ที่มีการชำระเงิน
   const paymentRows = useMemo(() => {
@@ -525,7 +555,7 @@ const DashboardPage: React.FC = () => {
                 <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <UserPlus className="w-4 h-4 text-indigo-500" />
                   จำนวนคนไข้ใหม่
-                  <span className="ml-auto text-lg font-bold text-indigo-600">{newPatients.length} คน</span>
+                  <span className="ml-auto text-lg font-bold text-indigo-600">{enrichedNewPatients.length} คน</span>
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* หัตถการที่สนใจ */}
@@ -646,11 +676,11 @@ const DashboardPage: React.FC = () => {
           <div className="bg-linear-to-r from-indigo-500 to-indigo-600 px-6 py-4">
             <h2 className="text-lg font-semibold text-white flex items-center gap-2">
               <UserPlus className="w-5 h-5" />
-              คนไข้ใหม่ ({newPatients.length} คน)
+              คนไข้ใหม่ ({enrichedNewPatients.length} คน)
             </h2>
           </div>
 
-          {newPatients.length > 0 ? (
+          {enrichedNewPatients.length > 0 ? (
             <>
               {/* Desktop: Table */}
               <div className="hidden md:block overflow-x-auto">
@@ -749,10 +779,10 @@ const DashboardPage: React.FC = () => {
               </div>
 
               {/* Pagination */}
-              {newPatients.length > NEW_PATIENT_PER_PAGE && (
+              {enrichedNewPatients.length > NEW_PATIENT_PER_PAGE && (
                 <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
                   <span className="text-xs text-gray-500">
-                    {(newPatientPage - 1) * NEW_PATIENT_PER_PAGE + 1}-{Math.min(newPatientPage * NEW_PATIENT_PER_PAGE, newPatients.length)} / {newPatients.length}
+                    {(newPatientPage - 1) * NEW_PATIENT_PER_PAGE + 1}-{Math.min(newPatientPage * NEW_PATIENT_PER_PAGE, enrichedNewPatients.length)} / {enrichedNewPatients.length}
                   </span>
                   <div className="flex items-center gap-1">
                     <button
@@ -762,21 +792,21 @@ const DashboardPage: React.FC = () => {
                     >
                       <ChevronLeft className="w-4 h-4 text-gray-600" />
                     </button>
-                    {Array.from({ length: Math.ceil(newPatients.length / NEW_PATIENT_PER_PAGE) }, (_, i) => i + 1).map((page) => (
+                    {Array.from({ length: Math.ceil(enrichedNewPatients.length / NEW_PATIENT_PER_PAGE) }, (_, i) => i + 1).map((page) => (
                       <button
                         key={page}
                         onClick={() => setNewPatientPage(page)}
                         className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg text-xs font-medium transition-colors ${page === newPatientPage
-                            ? 'bg-indigo-600 text-white'
-                            : 'text-gray-600 hover:bg-gray-100'
+                          ? 'bg-indigo-600 text-white'
+                          : 'text-gray-600 hover:bg-gray-100'
                           }`}
                       >
                         {page}
                       </button>
                     ))}
                     <button
-                      onClick={() => setNewPatientPage((p) => Math.min(Math.ceil(newPatients.length / NEW_PATIENT_PER_PAGE), p + 1))}
-                      disabled={newPatientPage >= Math.ceil(newPatients.length / NEW_PATIENT_PER_PAGE)}
+                      onClick={() => setNewPatientPage((p) => Math.min(Math.ceil(enrichedNewPatients.length / NEW_PATIENT_PER_PAGE), p + 1))}
+                      disabled={newPatientPage >= Math.ceil(enrichedNewPatients.length / NEW_PATIENT_PER_PAGE)}
                       className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
                     >
                       <ChevronRight className="w-4 h-4 text-gray-600" />
