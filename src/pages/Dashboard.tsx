@@ -24,6 +24,16 @@ const formatShortDate = (dateStr: string) => {
   ).padStart(2, "0")}/${date.getFullYear()}`;
 };
 
+const formatShortDateTime = (dateStr: string) => {
+  const date = new Date(dateStr);
+  const dd = String(date.getDate()).padStart(2, "0");
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const yyyy = date.getFullYear();
+  const hh = String(date.getHours()).padStart(2, "0");
+  const mi = String(date.getMinutes()).padStart(2, "0");
+  return `${dd}/${mm}/${yyyy} ${hh}:${mi}`;
+};
+
 // แปลชื่อช่องทางการชำระเงินให้อ่านง่าย
 const formatPaymentMethod = (method?: string) => {
   if (!method) return '-';
@@ -320,7 +330,7 @@ const DashboardPage: React.FC = () => {
           id: lead.id,
           name: lead.name,
           nickname: lead.nickname || '',
-          date: lead.appointmentDate ? formatShortDate(lead.appointmentDate) : '-',
+          date: lead.appointmentDate ? formatShortDateTime(lead.appointmentDate) : '-',
           procedures: proceduresText,
           proceduresTotal,
           depositUsed,
@@ -392,7 +402,7 @@ const DashboardPage: React.FC = () => {
       { wch: 5 },   // #
       { wch: 25 },  // ชื่อ-นามสกุล
       { wch: 12 },  // ชื่อเล่น
-      { wch: 12 },  // วันที่
+      { wch: 18 },  // วันที่
       { wch: 35 },  // รายการ
       { wch: 12 },  // ยอดรวม
       { wch: 12 },  // ใช้มัดจำ

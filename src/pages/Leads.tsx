@@ -1307,6 +1307,10 @@ const StatusModal = ({
           setValidationError("กรุณาเลือกวันและเวลานัดใหม่");
           return;
         }
+        if (!rescheduleNote.trim()) {
+          setValidationError("กรุณาระบุเหตุผลการเลื่อนนัด");
+          return;
+        }
       }
 
       if (selectedStatus === "cancelled") {
@@ -1383,6 +1387,15 @@ const StatusModal = ({
         if (appointmentNote.trim()) {
           payload.arrivedNote = appointmentNote.trim();
         }
+
+        if (nextAppointmentEnabled) {
+          payload.nextAppointment = {
+            hasNext: true,
+            date: (nextAppointmentDate && nextAppointmentTime)
+              ? `${nextAppointmentDate}T${nextAppointmentTime}:00+07:00`
+              : null,
+          };
+        }
       }
 
       if (selectedStatus === "scheduled") {
@@ -1394,7 +1407,7 @@ const StatusModal = ({
         payload.appointments.date = `${newAppointmentDate}T${newAppointmentTime}:00+07:00`;
         payload.rescheduledNote = rescheduleNote.trim();
       } else if (selectedStatus === "cancelled") {
-        payload.appointments.date = new Date().toISOString();
+        // payload.appointments.date = new Date().toISOString();
         payload.cancelledNote = cancelNote.trim();
       }
 
@@ -2008,13 +2021,17 @@ const StatusModal = ({
               {/* หมายเหตุการเลื่อนนัด */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  หมายเหตุการเลื่อนนัด
+                  หมายเหตุการเลื่อนนัด <span className="text-red-500">*</span>
                 </label>
                 <textarea
                   value={rescheduleNote}
-                  onChange={(e) => setRescheduleNote(e.target.value)}
+                  onChange={(e) => {
+                    setRescheduleNote(e.target.value);
+                    if (validationError) setValidationError("");
+                  }}
                   placeholder="เหตุผลการเลื่อนนัด เช่น คนไข้ติดธุระ..."
                   rows={3}
+                  required
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 bg-white resize-none"
                 />
               </div>

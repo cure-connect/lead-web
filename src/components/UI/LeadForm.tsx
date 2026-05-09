@@ -30,6 +30,8 @@ type LeadFormState = {
   note: string;
 };
 
+const NO_PHONE_SENTINEL = "-";
+
 const extractDateFromISO = (isoString?: string): string => {
   if (!isoString) return '';
   const date = new Date(isoString);
@@ -84,8 +86,10 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
   const [depositError, setDepositError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [phoneDuplicate, setPhoneDuplicate] = useState<{ fullname: string; nickname?: string } | null>(null);
+  const [noPhone, setNoPhone] = useState(lead?.phone === NO_PHONE_SENTINEL);
 
   const checkPhoneDuplicate = async (phone: string) => {
+    if (noPhone) { setPhoneDuplicate(null); return; }
     const normalized = phone.replace(/[-\s]/g, '');
     if (normalized.length < 9) { setPhoneDuplicate(null); return; }
     try {
@@ -142,6 +146,7 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
     setShowSuggestions(false);
     setPatientSuggestions([]);
     setPhoneDuplicate(null);
+    setNoPhone(patient.tel === NO_PHONE_SENTINEL);
     clearError('name');
   };
 
@@ -191,6 +196,7 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
   };
 
   const validatePhone = (phone: string): string | null => {
+    if (noPhone) return null;
     const normalized = normalizePhone(phone);
 
     if (!normalized) {
@@ -296,7 +302,8 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
         ...(lead || {}),
         ...formData,
         patientId: formData.patientId || undefined,
-        phone: normalizePhone(formData.phone),
+        // phone: normalizePhone(formData.phone),
+        phone: noPhone ? NO_PHONE_SENTINEL : normalizePhone(formData.phone),
         id: lead?.id || '',
         status: backendStatus,
         appointmentDate: backendStatus === 'scheduled' ? formData.appointmentDate : undefined,
@@ -385,7 +392,7 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
+            {/* <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">เบอร์ติดต่อ *</label>
               <input
                 type="tel"
@@ -398,6 +405,48 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
                 onBlur={() => { if (!formData.patientId) checkPhoneDuplicate(formData.phone); }}
                 className={`w-full px-3 py-2.5 sm:py-2 border rounded-lg sm:rounded-md text-base sm:text-sm focus:ring-[#1479FF] focus:border-[#1479FF] ${errors.phone || phoneDuplicate ? 'border-red-400' : 'border-gray-300'}`}
               />
+              {errors.phone && <p className="text-xs text-red-500 mt-1">{errors.phone}</p>}
+              {phoneDuplicate && !errors.phone && (
+                <p className="text-xs text-red-500 mt-1">
+                  ⚠ เบอร์นี้ซ้ำกับ: {phoneDuplicate.fullname}{phoneDuplicate.nickname ? ` (${phoneDuplicate.nickname})` : ''}
+                </p>
+              )}
+            </div> */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
+                เบอร์ติดต่อ {!noPhone && '*'}
+              </label>
+              <input
+                type="tel"
+                value={noPhone ? NO_PHONE_SENTINEL : formData.phone}
+                disabled={noPhone}
+                onChange={(e) => {
+                  setFormData({ ...formData, phone: e.target.value });
+                  clearError('phone');
+                  setPhoneDuplicate(null);
+                }}
+                onBlur={() => { if (!formData.patientId && !noPhone) checkPhoneDuplicate(formData.phone); }}
+                className={`w-full px-3 py-2.5 sm:py-2 border rounded-lg sm:rounded-md text-base sm:text-sm focus:ring-[#1479FF] focus:border-[#1479FF] ${errors.phone || phoneDuplicate ? 'border-red-400' : 'border-gray-300'} ${noPhone ? 'bg-gray-100 text-gray-400' : ''}`}
+              />
+              <label className="flex items-center gap-2 mt-1.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={noPhone}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setNoPhone(checked);
+                    if (checked) {
+                      setFormData({ ...formData, phone: NO_PHONE_SENTINEL });
+                      clearError('phone');
+                      setPhoneDuplicate(null);
+                    } else {
+                      setFormData({ ...formData, phone: '' });
+                    }
+                  }}
+                  className="w-4 h-4 rounded border-gray-300 text-[#1479FF] focus:ring-[#1479FF]"
+                />
+                <span className="text-xs text-gray-600">คนไข้ไม่มีเบอร์โทร</span>
+              </label>
               {errors.phone && <p className="text-xs text-red-500 mt-1">{errors.phone}</p>}
               {phoneDuplicate && !errors.phone && (
                 <p className="text-xs text-red-500 mt-1">
