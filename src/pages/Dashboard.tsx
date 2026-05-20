@@ -304,6 +304,7 @@ const DashboardPage: React.FC = () => {
           nickname: lead.nickname || '',
           date: lead.appointmentDate ? formatShortDateTime(lead.appointmentDate) : '-',
           procedures: proceduresText,
+          rawProcedures: lead.procedures,
           proceduresTotal,
           depositUsed,
           amount,
@@ -334,34 +335,50 @@ const DashboardPage: React.FC = () => {
     };
   }, [paymentRows]);
 
-  // Export ตารางสรุปค่าใช้จ่ายเป็น xlsx
+  // Export ตารางสรุปค่าใช้จ่ายเป็น xlsx (1 หัตถการ = 1 row)
   const handleExportXlsx = () => {
     if (paymentRows.length === 0) return;
 
-    const data = paymentRows.map((row, i) => ({
-      '#': i + 1,
-      'ชื่อ-นามสกุล': row.name,
-      'ชื่อเล่น': row.nickname,
-      'วันที่': row.date,
-      'รายการ': row.procedures,
-      'ยอดรวม': row.proceduresTotal,
-      'ใช้มัดจำ': row.depositUsed,
-      'ยอดชำระ': row.amount,
-      'ช่องทาง': row.methodLabel,
-      'ค่าธรรมเนียม': row.serviceCharge,
-      'ยอดสุทธิ': row.netAmount,
-    }));
+    const data: any[] = [];
+    let rowNum = 1;
 
-    // เพิ่มแถว total
+    paymentRows.forEach((row) => {
+      const procs = row.rawProcedures.length > 0
+        ? row.rawProcedures
+        : [{ name: 'ปรึกษาฟรี', price: '0', depositUsed: 0 }];
+
+      procs.forEach((proc, procIdx) => {
+        const price = parseFloat(proc.price) || 0;
+        const depUsed = proc.depositUsed || 0;
+        const isFirstProc = procIdx === 0;
+
+        data.push({
+          '#': rowNum++,
+          'ชื่อ-นามสกุล': row.name,
+          'ชื่อเล่น': row.nickname,
+          'วันที่': row.date,
+          'รายการ': proc.name,
+          'ราคาหัตถการ': price,
+          'ใช้มัดจำ': depUsed,
+          // ยอดรวม ช่องทาง ค่าธรรมเนียม ยอดสุทธิ → แสดงเฉพาะ row แรกของแต่ละ visit
+          'ยอดชำระ (รวม)': isFirstProc ? row.amount : '',
+          'ช่องทาง': isFirstProc ? row.methodLabel : '',
+          'ค่าธรรมเนียม': isFirstProc ? row.serviceCharge : '',
+          'ยอดสุทธิ': isFirstProc ? row.netAmount : '',
+        });
+      });
+    });
+
+    // แถว total
     data.push({
-      '#': '' as any,
+      '#': '',
       'ชื่อ-นามสกุล': 'รวมทั้งหมด',
       'ชื่อเล่น': '',
-      'วันที่': '',
-      'รายการ': `${paymentRows.length} รายการ`,
-      'ยอดรวม': paymentRows.reduce((s, r) => s + r.proceduresTotal, 0),
+      'วันที่': `${paymentRows.length} ครั้ง`,
+      'รายการ': `${data.length} รายการ`,
+      'ราคาหัตถการ': paymentRows.reduce((s, r) => s + r.proceduresTotal, 0),
       'ใช้มัดจำ': paymentRows.reduce((s, r) => s + r.depositUsed, 0),
-      'ยอดชำระ': finance.totalRevenue,
+      'ยอดชำระ (รวม)': finance.totalRevenue,
       'ช่องทาง': '',
       'ค่าธรรมเนียม': finance.totalServiceCharge,
       'ยอดสุทธิ': finance.totalNetRevenue,
@@ -369,16 +386,15 @@ const DashboardPage: React.FC = () => {
 
     const ws = XLSX.utils.json_to_sheet(data);
 
-    // กำหนดความกว้างคอลัมน์
     ws['!cols'] = [
       { wch: 5 },   // #
       { wch: 25 },  // ชื่อ-นามสกุล
       { wch: 12 },  // ชื่อเล่น
       { wch: 18 },  // วันที่
-      { wch: 35 },  // รายการ
-      { wch: 12 },  // ยอดรวม
+      { wch: 30 },  // รายการ
+      { wch: 14 },  // ราคาหัตถการ
       { wch: 12 },  // ใช้มัดจำ
-      { wch: 12 },  // ยอดชำระ
+      { wch: 14 },  // ยอดชำระ (รวม)
       { wch: 14 },  // ช่องทาง
       { wch: 14 },  // ค่าธรรมเนียม
       { wch: 14 },  // ยอดสุทธิ
