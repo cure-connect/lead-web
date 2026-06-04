@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
-import { Search, Plus, Edit2, Trash2, X, Users, CalendarCheck, Clock, XCircle, Eye, UserCheck, Wallet, Calendar, ChevronRight, ChevronDown, User, Loader2 } from "lucide-react";
+import { Search, Plus, Trash2, X, Users, CalendarCheck, Clock, XCircle, Eye, UserCheck, Wallet, Calendar, ChevronRight, ChevronDown, User, Loader2 } from "lucide-react";
 import { type Lead } from "../types";
 import Modal from "../components/UI/Modal";
 import LeadForm from "../components/UI/LeadForm";
@@ -60,7 +60,6 @@ const LeadsPage: React.FC = () => {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [leads, setLeads] = useState<Lead[]>([]);
 
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -242,22 +241,16 @@ const LeadsPage: React.FC = () => {
         payload.deposit = null;
       }
 
-      if (!editingLead) {
-        payload.clinic = {
-          name: lead.name,
-          branch: lead.branch || "Bangkok",
-        };
+      payload.clinic = {
+        name: lead.name,
+        branch: lead.branch || "Bangkok",
+      };
 
-        await api.post("/createlead", payload);
-        toast.success("เพิ่ม Lead สำเร็จ");
-      } else {
-        await api.patch(`/${lead.id}`, payload);
-        toast.success("บันทึกข้อมูลสำเร็จ");
-      }
+      await api.post("/createlead", payload);
+      toast.success("เพิ่ม Lead สำเร็จ");
 
       await fetchLeads(selectedYear);
       setIsModalOpen(false);
-      setEditingLead(null);
     } catch (error: any) {
       toast.error(error.message || "เกิดข้อผิดพลาด");
     }
@@ -407,7 +400,7 @@ const LeadsPage: React.FC = () => {
               </div>
 
               <button
-                onClick={() => { setEditingLead(null); setIsModalOpen(true); }}
+                onClick={() => { setIsModalOpen(true); }}
                 className="flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 bg-[#1479FF] text-white rounded-md whitespace-nowrap text-sm font-medium"
               >
                 <Plus className="w-5 h-5" />
@@ -635,18 +628,6 @@ const LeadsPage: React.FC = () => {
                               className="w-4 h-4 text-blue-600 cursor-pointer hover:scale-110 transition-transform"
                               onClick={() => setViewingLead(lead)}
                             />
-                            <Edit2
-                              className={`w-4 h-4 transition-all ${isLeadLocked(lead)
-                                ? "text-gray-300 cursor-not-allowed opacity-50"
-                                : "text-indigo-600 cursor-pointer hover:scale-110"
-                                }`}
-                              onClick={() => {
-                                if (!isLeadLocked(lead)) {
-                                  setEditingLead(lead);
-                                  setIsModalOpen(true);
-                                }
-                              }}
-                            />
                             <Trash2
                               className={`w-4 h-4 transition-all ${isLeadLocked(lead)
                                 ? "text-gray-300 cursor-not-allowed opacity-50"
@@ -813,24 +794,6 @@ const LeadsPage: React.FC = () => {
                         <button
                           onClick={() => {
                             if (!isLeadLocked(lead)) {
-                              setEditingLead(lead);
-                              setIsModalOpen(true);
-                            }
-                          }}
-                          disabled={isLeadLocked(lead)}
-                          className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium rounded-lg transition-colors
-                            ${isLeadLocked(lead)
-                              ? "text-gray-300 bg-gray-50"
-                              : "text-indigo-600 bg-indigo-50 active:bg-indigo-100"
-                            }
-                          `}
-                        >
-                          <Edit2 className="w-4 h-4" />
-                          แก้ไข
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (!isLeadLocked(lead)) {
                               openDeleteModal(lead);
                             }
                           }}
@@ -877,13 +840,13 @@ const LeadsPage: React.FC = () => {
 
       <Modal
         isOpen={isModalOpen}
-        onClose={() => { setIsModalOpen(false); setEditingLead(null); }}
-        title={editingLead ? "แก้ไขข้อมูล" : "เพิ่มข้อมูล"}
+        onClose={() => { setIsModalOpen(false); }}
+        title="เพิ่มข้อมูล"
       >
         <LeadForm
-          lead={editingLead}
+          lead={null}
           onSave={handleSave}
-          onClose={() => { setIsModalOpen(false); setEditingLead(null); }}
+          onClose={() => { setIsModalOpen(false); }}
         />
       </Modal>
 
