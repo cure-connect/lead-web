@@ -51,6 +51,37 @@ const extractTimeFromISO = (isoString?: string): string => {
   return `${hours}:${minutes}`;
 };
 
+// ─── DatePickerInput ──────────────────────────────────────────────────────────
+// Native input[type=date] ที่:
+//   • บังคับ format DD/MM/YYYY ผ่าน lang="en-GB"  (ใช้ได้ทุก locale ของเครื่อง)
+//   • ปีเป็น ค.ศ. เสมอ (ไม่ใช่ พ.ศ.)
+//   • ห้ามพิมพ์ — keyboard ทุกปุ่มถูก block, เปิด calendar picker ได้อย่างเดียว
+//   • value/onChange ยัง YYYY-MM-DD เหมือนเดิม → backend ไม่ต้องแก้
+// ──────────────────────────────────────────────────────────────────────────────
+interface DatePickerInputProps {
+  value: string; // YYYY-MM-DD or ''
+  onChange: (value: string) => void;
+  className?: string;
+}
+
+const DatePickerInput: React.FC<DatePickerInputProps> = ({ value, onChange, className }) => {
+  return (
+    <input
+      type="date"
+      lang="en-GB"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onKeyDown={(e) => e.preventDefault()}
+      onKeyPress={(e) => e.preventDefault()}
+      onPaste={(e) => e.preventDefault()}
+      className={`block w-full px-4 py-3.5 border border-gray-300 rounded-lg text-base leading-tight
+        focus:ring-2 focus:ring-[#1479FF] focus:border-[#1479FF] focus:outline-none
+        min-h-[52px] appearance-none cursor-pointer ${className ?? ''}`}
+    />
+  );
+};
+// ──────────────────────────────────────────────────────────────────────────────
+
 const steps = [
   { label: 'ข้อมูลลูกค้า' },
   { label: 'รายละเอียดนัดหมาย' },
@@ -253,16 +284,29 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
     }
   };
 
-  const validateStep2 = (): string | null => {
+  const validateStep2 = (): boolean => {
+    const newErrors: Record<string, string> = {};
+
+    if (formData.status === 'ทำนัด') {
+      if (!formData.appointmentDate) newErrors.appointmentDate = "กรุณาเลือกวันที่นัด";
+      if (!formData.appointmentTime) newErrors.appointmentTime = "กรุณาเลือกเวลานัด";
+    }
+
     if (depositEnabled) {
       if (!depositAmount.trim() || Number(depositAmount) <= 0) {
-        return "กรุณากรอกจำนวนเงินมัดจำ";
+        setDepositError("กรุณากรอกจำนวนเงินมัดจำ");
+        setErrors(newErrors);
+        return false;
       }
       if (slipUrls.length === 0) {
-        return "กรุณาอัปโหลดรูปสลิปการโอนเงิน";
+        setDepositError("กรุณาอัปโหลดรูปสลิปการโอนเงิน");
+        setErrors(newErrors);
+        return false;
       }
     }
-    return null;
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
   const handleDepositToggle = () => {
@@ -278,11 +322,8 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
   const handleSubmit = async () => {
     if (isSaving) return;
 
-    const error = validateStep2();
-    if (error) {
-      setDepositError(error);
-      return;
-    }
+    const isValid = validateStep2();
+    if (!isValid) return;
 
     setIsSaving(true);
 
@@ -583,35 +624,36 @@ const LeadForm: React.FC<LeadFormProps> = ({ lead, onSave, onClose }) => {
             <div className="flex gap-3 sm:gap-4">
               <div className="flex-1 min-w-0">
                 <label className="block text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">วันที่นัด</label>
-                <input
-                  type="date"
+                <DatePickerInput
                   value={formData.appointmentDate}
-                  onChange={(e) => setFormData({ ...formData, appointmentDate: e.target.value })}
-                  className={`
-                      block w-full px-4 py-3.5
-                      border border-gray-300 rounded-lg
-                      text-base leading-tight
-                      focus:ring-2 focus:ring-[#1479FF] focus:border-[#1479FF] focus:outline-none
-                      min-h-[52px]
-                      appearance-none
-                    `}
+                  onChange={(val) => {
+                    setFormData({ ...formData, appointmentDate: val });
+                    clearError('appointmentDate');
+                  }}
+                  className={errors.appointmentDate ? 'border-red-400' : ''}
                 />
+                {errors.appointmentDate && <p className="text-xs text-red-500 mt-1">{errors.appointmentDate}</p>}
               </div>
               <div className="flex-1 min-w-0">
                 <label className="block text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">เวลานัด</label>
                 <input
                   type="time"
                   value={formData.appointmentTime}
-                  onChange={(e) => setFormData({ ...formData, appointmentTime: e.target.value })}
+                  onChange={(e) => {
+                    setFormData({ ...formData, appointmentTime: e.target.value });
+                    clearError('appointmentTime');
+                  }}
                   className={`
                       block w-full px-4 py-3.5
-                      border border-gray-300 rounded-lg
+                      border rounded-lg
                       text-base leading-tight
                       focus:ring-2 focus:ring-[#1479FF] focus:border-[#1479FF] focus:outline-none
                       min-h-[52px]
                       appearance-none
+                      ${errors.appointmentTime ? 'border-red-400' : 'border-gray-300'}
                     `}
                 />
+                {errors.appointmentTime && <p className="text-xs text-red-500 mt-1">{errors.appointmentTime}</p>}
               </div>
             </div>
           )}
