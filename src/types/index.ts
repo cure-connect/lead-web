@@ -71,5 +71,25 @@ export interface Lead {
     name: string;
     price: string;
     commissionRate?: number;
+    depositUsed?: number;
   }>;
+
+  // ประวัติการแก้ไขหัตถการย้อนหลัง (สถานะ arrived) — ดูได้เฉพาะใน Synergy
+  editHistory?: LeadEditHistoryEntry[];
+}
+
+export interface LeadEditHistoryEntry {
+  editedBy: string;
+  note?: string;
+  editedAt: string;
+  previous?: {
+    procedures?: Array<{
+      name: string;
+      price: string | number;
+      depositUsed?: number;
+    }>;
+    payments?: LeadPayment;
+    deposit?: LeadDeposit;
+    receiptUrls?: string[];
+  };
 }

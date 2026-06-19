@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
-import { Search, Plus, Trash2, X, Users, CalendarCheck, Clock, XCircle, Eye, UserCheck, Wallet, Calendar, ChevronRight, ChevronDown, User, Loader2 } from "lucide-react";
+import { Search, Plus, Trash2, X, Users, CalendarCheck, Clock, XCircle, Eye, UserCheck, Wallet, Calendar, ChevronRight, ChevronDown, User, Loader2, Pencil, History } from "lucide-react";
 import { type Lead } from "../types";
 import Modal from "../components/UI/Modal";
 import LeadForm from "../components/UI/LeadForm";
@@ -66,6 +66,7 @@ const LeadsPage: React.FC = () => {
   const [leadToDelete, setLeadToDelete] = useState<Lead | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [statusModalLead, setStatusModalLead] = useState<Lead | null>(null);
+  const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [viewingLead, setViewingLead] = useState<Lead | null>(null);
 
   const { toasts, toast, removeToast } = useToast();
@@ -111,6 +112,7 @@ const LeadsPage: React.FC = () => {
           } : undefined,
           receiptUrl: item.receiptUrl || "",
           receiptUrls: item.receiptUrls || (item.receiptUrl ? [item.receiptUrl] : []),
+          editHistory: Array.isArray(item.editHistory) ? item.editHistory : [],
         };
       });
 
@@ -628,6 +630,12 @@ const LeadsPage: React.FC = () => {
                               className="w-4 h-4 text-blue-600 cursor-pointer hover:scale-110 transition-transform"
                               onClick={() => setViewingLead(lead)}
                             />
+                            {lead.status === "arrived" && (
+                              <Pencil
+                                className="w-4 h-4 text-amber-600 cursor-pointer hover:scale-110 transition-transform"
+                                onClick={() => setEditingLead(lead)}
+                              />
+                            )}
                             <Trash2
                               className={`w-4 h-4 transition-all ${isLeadLocked(lead)
                                 ? "text-gray-300 cursor-not-allowed opacity-50"
@@ -692,7 +700,7 @@ const LeadsPage: React.FC = () => {
 
                         {activeTab === "arrived" && (
                           <button
-                            onClick={() => openStatusModal(lead)}
+                            onClick={() => setEditingLead(lead)}
                             className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-full transition-all ml-2 shrink-0 bg-green-100 text-green-700 active:scale-95"
                           >
                             {statusLabel[lead.status]}
@@ -791,6 +799,15 @@ const LeadsPage: React.FC = () => {
                           <Eye className="w-4 h-4" />
                           ดูข้อมูล
                         </button>
+                        {lead.status === "arrived" && (
+                          <button
+                            onClick={() => setEditingLead(lead)}
+                            className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-amber-600 bg-amber-50 rounded-lg active:bg-amber-100 transition-colors"
+                          >
+                            <Pencil className="w-4 h-4" />
+                            แก้ไข
+                          </button>
+                        )}
                         <button
                           onClick={() => {
                             if (!isLeadLocked(lead)) {
@@ -825,6 +842,19 @@ const LeadsPage: React.FC = () => {
           onSave={async () => {
             await fetchLeads(selectedYear);
             setStatusModalLead(null);
+          }}
+          onSuccess={(message) => toast.success(message)}
+          onError={(message) => toast.error(message)}
+        />
+      )}
+
+      {editingLead && (
+        <EditArrivedModal
+          lead={editingLead}
+          onClose={() => setEditingLead(null)}
+          onSaved={async () => {
+            await fetchLeads(selectedYear);
+            setEditingLead(null);
           }}
           onSuccess={(message) => toast.success(message)}
           onError={(message) => toast.error(message)}
@@ -2053,6 +2083,576 @@ const StatusModal = ({
   );
 };
 
+// ============================================
+// EditArrivedModal - แก้ไขหัตถการย้อนหลัง (เฉพาะสถานะ "มาตามนัด")
+// แก้ได้: หัตถการ / ราคา / การใช้มัดจำ / ช่องทางชำระ / รูปสลิป(ใบเสร็จ)
+// แก้ไม่ได้: ข้อมูลคนไข้  |  ไม่มีนัดหมายครั้งถัดไป
+// ยืนยันการแก้ไข → กรอกหมายเหตุ + ชื่อผู้แก้ไข, เก็บประวัติ+สลิปเก่าไว้
+// ============================================
+const EditArrivedModal = ({
+  lead,
+  onClose,
+  onSaved,
+  onSuccess,
+  onError,
+}: {
+  lead: Lead;
+  onClose: () => void;
+  onSaved: () => void | Promise<void>;
+  onSuccess?: (message: string) => void;
+  onError?: (message: string) => void;
+}) => {
+  const [procedures, setProcedures] = useState<
+    Array<{ name: string; price: string; depositUsed: string }>
+  >(
+    lead.procedures && lead.procedures.length > 0
+      ? lead.procedures.map((p: any) => ({
+        name: p.name || "",
+        price: String(p.price ?? 0),
+        depositUsed: String(p.depositUsed || 0),
+      }))
+      : [{ name: "", price: "0", depositUsed: "0" }]
+  );
+
+  const [paymentMethod, setPaymentMethod] = useState(lead.payments?.method || "");
+  const [serviceChargeRate, setServiceChargeRate] = useState<number>(
+    lead.payments?.serviceCharge?.rate ?? 3
+  );
+  const [receiptUrls, setReceiptUrls] = useState<string[]>(
+    (lead.receiptUrls?.length ?? 0) > 0
+      ? lead.receiptUrls!
+      : lead.receiptUrl
+        ? [lead.receiptUrl]
+        : []
+  );
+
+  const [validationError, setValidationError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+
+  // confirm sub-modal
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [editedBy, setEditedBy] = useState("");
+  const [editNote, setEditNote] = useState("");
+  const [confirmError, setConfirmError] = useState("");
+
+  // procedure dropdown settings
+  const [procedureOptions, setProcedureOptions] = useState<Array<{ _id: string; name: string }>>([]);
+  const [procedureConfig, setProcedureConfig] = useState({ enabled: false, allowCustom: true });
+  const [isLoadingOptions, setIsLoadingOptions] = useState(false);
+
+  // patient wallet
+  const [patientBalance, setPatientBalance] = useState<number>(0);
+
+  // มัดจำที่ lead นี้ใช้ไปเดิม (จะถูก "คืน" กลับมาเป็น pool ที่จัดสรรใหม่ได้)
+  const oldDepositUsed = (lead.procedures || []).reduce(
+    (sum: number, p: any) => sum + (Number(p.depositUsed) || 0),
+    0
+  );
+
+  useEffect(() => {
+    const fetchProcedureSettings = async () => {
+      try {
+        setIsLoadingOptions(true);
+        const res = await api.get("/setting/gettype");
+        if (res.data.procedures) setProcedureOptions(res.data.procedures);
+        if (res.data.config?.procedure) setProcedureConfig(res.data.config.procedure);
+      } catch (err) {
+        console.error("Failed to fetch procedure settings", err);
+      } finally {
+        setIsLoadingOptions(false);
+      }
+    };
+    fetchProcedureSettings();
+  }, []);
+
+  useEffect(() => {
+    const fetchPatientBalance = async () => {
+      const pid = (lead as any).patientId;
+      if (!pid) {
+        setPatientBalance(0);
+        return;
+      }
+      try {
+        const res = await api.get(`/patient/${pid}`);
+        setPatientBalance(res.data?.data?.balance ?? 0);
+      } catch (err) {
+        console.error("Failed to fetch patient balance", err);
+        setPatientBalance(0);
+      }
+    };
+    fetchPatientBalance();
+  }, [lead]);
+
+  const totalAmount = procedures.reduce((sum, p) => sum + (parseFloat(p.price) || 0), 0);
+  const totalDepositUsed = procedures.reduce((sum, p) => sum + (parseFloat(p.depositUsed) || 0), 0);
+
+  // pool มัดจำที่จัดสรรใหม่ได้ = ยอดคงเหลือปัจจุบัน + ที่ lead นี้เคยใช้
+  const effectiveAvailable = patientBalance + oldDepositUsed;
+  const remainingDeposit = effectiveAvailable - totalDepositUsed;
+
+  const serviceChargeAmount =
+    paymentMethod === "card"
+      ? Math.round((totalAmount * serviceChargeRate) / 100 * 100) / 100
+      : 0;
+  const netAmount = totalAmount - serviceChargeAmount;
+
+  const addProcedure = () => {
+    setProcedures([...procedures, { name: "", price: "0", depositUsed: "0" }]);
+  };
+  const removeProcedure = (index: number) => {
+    setProcedures(procedures.filter((_, i) => i !== index));
+  };
+  const updateProcedure = (index: number, key: string, value: any) => {
+    setProcedures((prev) => prev.map((item, i) => (i === index ? { ...item, [key]: value } : item)));
+    setValidationError("");
+  };
+
+  // ตรวจสอบความถูกต้องก่อนเปิด confirm
+  const handleProceed = () => {
+    setValidationError("");
+
+    const validProcedures = procedures.filter((p) => p.name && p.name.trim());
+
+    if (validProcedures.length === 0) {
+      setValidationError("กรุณากรอกข้อมูลหัตถการอย่างน้อย 1 รายการ");
+      return;
+    }
+    if (validProcedures.some((p) => parseFloat(p.price) < 0)) {
+      setValidationError("จำนวนเงินต้องไม่ติดลบ");
+      return;
+    }
+
+    const calcTotalDepositUsed = validProcedures.reduce(
+      (sum, p) => sum + (parseFloat(p.depositUsed) || 0),
+      0
+    );
+    if (calcTotalDepositUsed > effectiveAvailable) {
+      setValidationError(
+        `ใช้มัดจำเกินยอดที่จัดสรรได้ (สูงสุด ${effectiveAvailable.toLocaleString()} บาท)`
+      );
+      return;
+    }
+
+    const calcTotalAmount = validProcedures.reduce((sum, p) => sum + (parseFloat(p.price) || 0), 0);
+    if (calcTotalAmount > 0) {
+      if (!paymentMethod) {
+        setValidationError("กรุณาเลือกช่องทางการชำระเงิน");
+        return;
+      }
+      if (receiptUrls.length === 0) {
+        setValidationError("กรุณาอัปโหลดรูปใบเสร็จ");
+        return;
+      }
+    }
+
+    setConfirmError("");
+    setShowConfirm(true);
+  };
+
+  const handleConfirmSave = async () => {
+    if (isSaving) return;
+
+    if (!editedBy.trim()) {
+      setConfirmError("กรุณาระบุชื่อผู้แก้ไข");
+      return;
+    }
+    if (!editNote.trim()) {
+      setConfirmError("กรุณาระบุหมายเหตุการแก้ไข");
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+
+      const validProcedures = procedures.filter((p) => p.name && p.name.trim());
+      const calcTotalAmount = validProcedures.reduce((sum, p) => sum + (parseFloat(p.price) || 0), 0);
+
+      let payments: any;
+      if (calcTotalAmount === 0) {
+        payments = { method: "free", amount: 0 };
+      } else {
+        const scRate = paymentMethod === "card" ? serviceChargeRate : 0;
+        const scAmount =
+          paymentMethod === "card"
+            ? Math.round((calcTotalAmount * scRate) / 100 * 100) / 100
+            : 0;
+        payments = { method: paymentMethod, amount: calcTotalAmount };
+        if (paymentMethod === "card") {
+          payments.serviceCharge = {
+            rate: scRate,
+            amount: scAmount,
+            netAmount: calcTotalAmount - scAmount,
+          };
+        }
+        // ไม่ส่ง commission — ปล่อยให้ Synergy เป็นผู้ adjust ค่าคอมเอง
+      }
+
+      const payload: any = {
+        procedures: validProcedures.map((p) => ({
+          name: p.name,
+          price: p.price,
+          ...(parseFloat(p.depositUsed) > 0 ? { depositUsed: parseFloat(p.depositUsed) } : {}),
+        })),
+        payments,
+        receiptUrls: calcTotalAmount > 0 ? receiptUrls : [],
+        editedBy: editedBy.trim(),
+        editNote: editNote.trim(),
+      };
+
+      await api.patch(`/${lead.id}/edit-arrived`, payload);
+
+      onSuccess?.("แก้ไขสำเร็จ");
+      await onSaved();
+      onClose();
+    } catch (err: any) {
+      console.error(err);
+      const msg = err?.response?.data?.message || "แก้ไขไม่สำเร็จ";
+      setConfirmError(msg);
+      onError?.(msg);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center z-50">
+      <div className="bg-white w-full sm:max-w-2xl sm:w-full sm:mx-4 max-h-[85dvh] sm:max-h-[85vh] flex flex-col shadow-xl overflow-hidden rounded-t-2xl sm:rounded-2xl">
+        <div className="flex justify-between items-center px-4 sm:px-6 py-3 bg-amber-500 shrink-0">
+          <div className="flex items-center gap-2">
+            <Pencil className="w-4 h-4 text-white" />
+            <h2 className="text-base font-semibold text-white">แก้ไข</h2>
+          </div>
+          <button onClick={onClose} className="p-1 rounded-full hover:bg-white/20 transition-colors">
+            <X className="w-5 h-5 text-white" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 pb-6 sm:p-6 space-y-6 overscroll-contain">
+          {/* ข้อมูลคนไข้ (อ่านอย่างเดียว) */}
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-gray-100 rounded-lg">
+                <User className="w-5 h-5 text-gray-600" />
+              </div>
+              <span className="text-sm font-semibold text-gray-700">ข้อมูลคนไข้</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <InfoItem label="ชื่อ-นามสกุล" value={lead.name || "-"} />
+              <InfoItem label="ชื่อเล่น" value={lead.nickname || "-"} />
+              <InfoItem label="เบอร์ติดต่อ" value={lead.phone || "-"} />
+              {lead.appointmentDate && (
+                <InfoItem label="วันที่มา" value={formatDate(lead.appointmentDate)} />
+              )}
+            </div>
+          </div>
+
+          {/* มัดจำคงเหลือ */}
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Wallet className="w-5 h-5 text-blue-600" />
+                <span className="text-sm font-medium text-gray-700">มัดจำ</span>
+              </div>
+              <span className="text-lg font-bold text-blue-700">
+                {effectiveAvailable.toLocaleString()} บาท
+              </span>
+            </div>
+            {totalDepositUsed > 0 && (
+              <div className="mt-3 pt-3 border-t border-blue-200 space-y-1">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">ใช้มัดจำ</span>
+                  <span className="font-medium text-orange-600">-{totalDepositUsed.toLocaleString()} บาท</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600 font-medium">คงเหลือ</span>
+                  <span className={`font-bold ${remainingDeposit < 0 ? "text-red-600" : "text-blue-700"}`}>
+                    {remainingDeposit.toLocaleString()} บาท
+                  </span>
+                </div>
+                {remainingDeposit < 0 && (
+                  <p className="text-xs text-red-500 mt-1">⚠ ใช้มัดจำเกินยอดที่จัดสรรได้</p>
+                )}
+              </div>
+            )}
+          </div>
+
+          <h3 className="font-semibold text-gray-700">ข้อมูลการทำหัตถการ</h3>
+
+          {procedures.map((procedure, index) => (
+            <div key={index} className="bg-gray-50 p-3 rounded-xl space-y-2 border border-gray-200">
+              <div className="flex gap-2 items-end">
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    ชื่อหัตถการ
+                    {procedureConfig.enabled && procedureConfig.allowCustom && (
+                      <span className="text-gray-400 font-normal ml-1 text-xs">(เลือกหรือพิมพ์เอง)</span>
+                    )}
+                  </label>
+                  {procedureConfig.enabled ? (
+                    <ProcedureComboBox
+                      value={procedure.name}
+                      onChange={(value) => updateProcedure(index, "name", value)}
+                      options={procedureOptions}
+                      allowCustom={procedureConfig.allowCustom}
+                      placeholder={procedureConfig.allowCustom ? "เลือกหรือพิมพ์หัตถการ" : "เลือกหัตถการ"}
+                      disabled={isLoadingOptions}
+                    />
+                  ) : (
+                    <input
+                      type="text"
+                      placeholder="ชื่อหัตถการ"
+                      value={procedure.name}
+                      onChange={(e) => updateProcedure(index, "name", e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-md bg-white"
+                    />
+                  )}
+                </div>
+
+                <div className="w-36">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">ราคา (บาท)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    value={procedure.price ?? ""}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === "" || parseFloat(val) >= 0) {
+                        updateProcedure(index, "price", val);
+                      }
+                    }}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-md bg-white text-right"
+                  />
+                </div>
+
+                {effectiveAvailable > 0 && (
+                  <div className="w-16 text-center">
+                    <label className="block text-sm font-medium text-blue-600 mb-1">มัดจำ</label>
+                    <div className="flex items-center justify-center h-[38px]">
+                      {(() => {
+                        const currentUsed = parseFloat(procedure.depositUsed) || 0;
+                        const usedByOthers = procedures.reduce(
+                          (sum, p, i) => (i !== index ? sum + (parseFloat(p.depositUsed) || 0) : sum),
+                          0
+                        );
+                        const available = effectiveAvailable - usedByOthers;
+                        const isChecked = currentUsed > 0;
+                        const isDisabled = !isChecked && available <= 0;
+                        return (
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            disabled={isDisabled}
+                            title={isDisabled ? "มัดจำคงเหลือไม่เพียงพอ" : `ใช้มัดจำ ${isChecked ? currentUsed.toLocaleString() : ""} บาท`}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                const price = parseFloat(procedure.price) || 0;
+                                const autoAmount = Math.min(price, Math.max(available, 0));
+                                updateProcedure(index, "depositUsed", String(autoAmount));
+                              } else {
+                                updateProcedure(index, "depositUsed", "0");
+                              }
+                            }}
+                            className={`w-5 h-5 rounded border-gray-300 focus:ring-blue-500 ${isDisabled ? "text-gray-300 cursor-not-allowed" : "text-blue-600 cursor-pointer"}`}
+                          />
+                        );
+                      })()}
+                    </div>
+                  </div>
+                )}
+
+                {procedures.length > 1 && (
+                  <button onClick={() => removeProcedure(index)} className="text-red-500 hover:text-red-700 pb-2">
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+
+          <button
+            onClick={addProcedure}
+            className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-800 text-sm font-medium"
+          >
+            <Plus className="w-4 h-4" />
+            เพิ่มหัตถการ
+          </button>
+
+          <div className="flex justify-between items-center bg-indigo-50 px-4 py-3 rounded-lg">
+            <span className="text-sm font-medium">ยอดรวม</span>
+            <span className="text-xl font-semibold text-indigo-600">{totalAmount.toLocaleString()} บาท</span>
+          </div>
+
+          {totalAmount === 0 ? (
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center">
+              <p className="text-blue-700 font-medium">ปรึกษาฟรี - ไม่มีค่าใช้จ่าย</p>
+            </div>
+          ) : (
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                ช่องทางชำระเงิน <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={paymentMethod}
+                onChange={(e) => {
+                  setPaymentMethod(e.target.value);
+                  setValidationError("");
+                }}
+                className="w-full px-4 py-2.5 border border-gray-200 rounded-lg"
+              >
+                <option value="">เลือกช่องทางชำระเงิน</option>
+                <option value="cash">เงินสด</option>
+                <option value="transfer">โอนเงิน</option>
+                <option value="card">บัตรเครดิต</option>
+              </select>
+            </div>
+          )}
+
+          {paymentMethod === "card" && totalAmount > 0 && (
+            <div className="space-y-4 bg-amber-50 border border-amber-200 rounded-xl p-4">
+              <div className="flex items-center gap-2 text-amber-700">
+                <span className="text-sm font-semibold">Service Charge บัตรเครดิต</span>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">อัตรา Service Charge (%)</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    value={serviceChargeRate}
+                    onChange={(e) => setServiceChargeRate(parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 pr-10 border rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-medium">%</span>
+                </div>
+              </div>
+              <div className="space-y-2 pt-2 border-t border-amber-200">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">ยอดรวมหัตถการ</span>
+                  <span className="font-medium">{totalAmount.toLocaleString()} บาท</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-red-600">หัก Service Charge ({serviceChargeRate}%)</span>
+                  <span className="font-medium text-red-600">-{serviceChargeAmount.toLocaleString()} บาท</span>
+                </div>
+                <div className="flex justify-between items-center pt-2 border-t border-amber-300">
+                  <span className="text-sm font-semibold text-gray-800">ยอดสุทธิที่คลินิกได้รับ</span>
+                  <span className="text-lg font-bold text-green-600">{netAmount.toLocaleString()} บาท</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {totalAmount > 0 && (
+            <MultiImageUpload
+              label="ใบเสร็จ / หลักฐานการรับชำระ (สลิป)"
+              required
+              urls={receiptUrls}
+              onUrlsChange={setReceiptUrls}
+              uploadEndpoint="/upload/slip"
+              fieldName="slip"
+              maxFiles={5}
+              showIcon
+              iconBgColor="bg-amber-100"
+              iconColor="text-amber-600"
+            />
+          )}
+
+          <p className="text-xs text-gray-400">
+            * รูปสลิปเดิมจะถูกเก็บไว้ในประวัติการแก้ไข สามารถดูย้อนหลังได้ในหน้ารายละเอียด
+          </p>
+        </div>
+
+        <div className="px-6 py-3 bg-gray-50 shrink-0">
+          {validationError && <p className="text-sm text-red-500 mb-3">* {validationError}</p>}
+          <div className="flex justify-end gap-3">
+            <button
+              onClick={onClose}
+              disabled={isSaving}
+              className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors disabled:opacity-50"
+            >
+              ยกเลิก
+            </button>
+            <button
+              onClick={handleProceed}
+              disabled={isSaving}
+              className="px-5 py-2 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600 disabled:bg-gray-300 transition-colors flex items-center gap-2"
+            >
+              ยืนยัน
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Confirm sub-modal: หมายเหตุ + ชื่อผู้แก้ไข */}
+      {showConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-60 p-0 sm:p-4">
+          <div className="bg-white w-full sm:max-w-md sm:w-full rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden">
+            <div className="px-5 py-4 bg-amber-500">
+              <h3 className="text-base font-semibold text-white">ยืนยันการแก้ไข</h3>
+            </div>
+            <div className="p-5 space-y-4">
+              <p className="text-sm text-gray-600">
+                กรุณาระบุชื่อผู้แก้ไขและหมายเหตุ ระบบจะเก็บข้อมูลเดิมไว้ในประวัติการแก้ไข
+              </p>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  ชื่อ <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={editedBy}
+                  onChange={(e) => {
+                    setEditedBy(e.target.value);
+                    if (confirmError) setConfirmError("");
+                  }}
+                  placeholder="ชื่อผู้ทำการแก้ไข"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-amber-500 focus:border-amber-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  หมายเหตุ <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={editNote}
+                  onChange={(e) => {
+                    setEditNote(e.target.value);
+                    if (confirmError) setConfirmError("");
+                  }}
+                  placeholder="เหตุผล/รายละเอียดการแก้ไข เช่น แก้ไขราคาหัตถการให้ถูกต้อง..."
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-amber-500 focus:border-amber-500 resize-none"
+                />
+              </div>
+              {confirmError && <p className="text-sm text-red-500">* {confirmError}</p>}
+            </div>
+            <div className="px-5 py-3 bg-gray-50 flex justify-end gap-3">
+              <button
+                onClick={() => setShowConfirm(false)}
+                disabled={isSaving}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors disabled:opacity-50"
+              >
+                ย้อนกลับ
+              </button>
+              <button
+                onClick={handleConfirmSave}
+                disabled={isSaving}
+                className="px-5 py-2 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600 disabled:bg-gray-300 transition-colors flex items-center gap-2"
+              >
+                {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+                {isSaving ? "กำลังบันทึก..." : "ยืนยันบันทึก"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const ViewLeadModal = ({
   lead,
   onClose,
@@ -2084,6 +2684,8 @@ const ViewLeadModal = ({
   };
 
   const status = statusConfig[lead.status] || statusConfig.pending;
+
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center z-50">
@@ -2302,6 +2904,99 @@ const ViewLeadModal = ({
                 เหตุผลการยกเลิกนัด
               </h3>
               <p className="text-sm text-gray-700 whitespace-pre-wrap bg-white rounded-lg p-3">{lead.cancelledNote}</p>
+            </div>
+          )}
+
+          {/* ประวัติการแก้ไขย้อนหลัง (ดูได้เฉพาะใน Synergy) */}
+          {Array.isArray((lead as any).editHistory) && (lead as any).editHistory.length > 0 && (
+            <div className="bg-amber-50 rounded-xl overflow-hidden">
+              <button
+                onClick={() => setIsHistoryOpen((prev) => !prev)}
+                className="w-full flex items-center justify-between px-4 py-3 hover:bg-amber-100 transition-colors"
+              >
+                <h3 className="text-sm font-semibold text-amber-700 flex items-center gap-2">
+                  <History className="w-4 h-4" />
+                  ประวัติการแก้ไขย้อนหลัง ({(lead as any).editHistory.length})
+                </h3>
+                {isHistoryOpen ? (
+                  <ChevronDown className="w-4 h-4 text-amber-600" />
+                ) : (
+                  <ChevronRight className="w-4 h-4 text-amber-600" />
+                )}
+              </button>
+
+              {isHistoryOpen && (
+                <div className="px-4 pb-4 space-y-3">
+                  {[...(lead as any).editHistory]
+                    .sort((a: any, b: any) => new Date(b.editedAt).getTime() - new Date(a.editedAt).getTime())
+                    .map((entry: any, idx: number) => {
+                      const prev = entry.previous || {};
+                      const prevSlips: string[] =
+                        (prev.receiptUrls?.length ? prev.receiptUrls : (prev.deposit?.slipUrls || [])) || [];
+                      return (
+                        <div key={idx} className="bg-white rounded-lg border border-amber-200 p-3 space-y-2">
+                          <div className="flex items-center justify-between flex-wrap gap-1">
+                            <span className="text-sm font-medium text-gray-800">
+                              ผู้แก้ไข: {entry.editedBy || "-"}
+                            </span>
+                            <span className="text-xs text-gray-400">
+                              {entry.editedAt ? formatDateTime(entry.editedAt) : ""}
+                            </span>
+                          </div>
+
+                          {entry.note && (
+                            <p className="text-sm text-gray-600 whitespace-pre-wrap bg-amber-50 rounded p-2">
+                              {entry.note}
+                            </p>
+                          )}
+
+                          {Array.isArray(prev.procedures) && prev.procedures.length > 0 && (
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium text-gray-500">หัตถการเดิม</p>
+                              {prev.procedures.map((p: any, i: number) => (
+                                <div key={i} className="flex justify-between text-xs text-gray-600 px-2">
+                                  <span>{p.name}</span>
+                                  <span>{Number(p.price).toLocaleString()} บาท</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {prev.payments?.amount !== undefined && (
+                            <p className="text-xs text-gray-500">
+                              ยอดเดิม:{" "}
+                              <span className="font-medium text-gray-700">
+                                {Number(prev.payments.amount).toLocaleString()} บาท
+                              </span>
+                            </p>
+                          )}
+
+                          {prevSlips.length > 0 && (
+                            <div>
+                              <p className="text-xs font-medium text-gray-500 mb-1">สลิป/ใบเสร็จเดิม</p>
+                              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                                {prevSlips.map((url: string, i: number) => {
+                                  const fullUrl = url.startsWith("http")
+                                    ? url
+                                    : `${import.meta.env.VITE_API_URL || ""}${url}`;
+                                  return (
+                                    <div
+                                      key={i}
+                                      className="relative aspect-square bg-white rounded-lg overflow-hidden border border-amber-200 cursor-pointer hover:shadow-md transition-shadow"
+                                      onClick={() => window.open(fullUrl, "_blank")}
+                                    >
+                                      <img src={fullUrl} alt={`สลิปเดิม ${i + 1}`} className="w-full h-full object-cover" />
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
             </div>
           )}
         </div>

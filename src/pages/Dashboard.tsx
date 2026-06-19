@@ -298,11 +298,15 @@ const DashboardPage: React.FC = () => {
         const amount = lead.payments?.amount || 0;
         const serviceCharge = lead.payments?.serviceCharge?.amount || 0;
         const netAmount = lead.payments?.serviceCharge?.netAmount ?? amount;
+        const interestText = Array.isArray(lead.interests) && lead.interests.length > 0
+          ? lead.interests.map((it) => it.name).join(', ')
+          : '';
         return {
           id: lead.id,
           name: lead.name,
           nickname: lead.nickname || '',
           date: lead.appointmentDate ? formatShortDateTime(lead.appointmentDate) : '-',
+          interest: interestText,
           procedures: proceduresText,
           rawProcedures: lead.procedures,
           proceduresTotal,
@@ -357,6 +361,7 @@ const DashboardPage: React.FC = () => {
           'ชื่อ-นามสกุล': row.name,
           'ชื่อเล่น': row.nickname,
           'วันที่': row.date,
+          'หัตถการที่สนใจ': isFirstProc ? row.interest : '',
           'รายการ': proc.name,
           'ราคาหัตถการ': price,
           'ใช้มัดจำ': depUsed,
@@ -369,12 +374,12 @@ const DashboardPage: React.FC = () => {
       });
     });
 
-    // แถว total
     data.push({
       '#': '',
       'ชื่อ-นามสกุล': 'รวมทั้งหมด',
       'ชื่อเล่น': '',
       'วันที่': `${paymentRows.length} ครั้ง`,
+      'หัตถการที่สนใจ': '',
       'รายการ': `${data.length} รายการ`,
       'ราคาหัตถการ': paymentRows.reduce((s, r) => s + r.proceduresTotal, 0),
       'ใช้มัดจำ': paymentRows.reduce((s, r) => s + r.depositUsed, 0),
@@ -391,6 +396,7 @@ const DashboardPage: React.FC = () => {
       { wch: 25 },  // ชื่อ-นามสกุล
       { wch: 12 },  // ชื่อเล่น
       { wch: 18 },  // วันที่
+      { wch: 25 },  // ความสนใจ
       { wch: 30 },  // รายการ
       { wch: 14 },  // ราคาหัตถการ
       { wch: 12 },  // ใช้มัดจำ
@@ -861,6 +867,9 @@ const DashboardPage: React.FC = () => {
                       <th className="px-4 py-3 text-center font-semibold text-gray-600 border-b border-gray-200 text-xs" style={{ minWidth: 90 }}>
                         วันที่
                       </th>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-600 border-b border-gray-200 text-xs" style={{ minWidth: 160 }}>
+                        หัตถการที่สนใจ
+                      </th>
                       <th className="px-4 py-3 text-left font-semibold text-gray-600 border-b border-gray-200 text-xs" style={{ minWidth: 200 }}>
                         รายการ
                       </th>
@@ -895,6 +904,15 @@ const DashboardPage: React.FC = () => {
                           )}
                         </td>
                         <td className="px-4 py-2.5 text-center text-gray-600 text-xs">{row.date}</td>
+                        <td className="px-4 py-2.5 text-gray-700 text-xs">
+                          {row.interest ? (
+                            <span className="inline-flex px-2 py-0.5 bg-amber-50 text-amber-700 text-[11px] rounded-full border border-amber-200">
+                              {row.interest}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
                         <td className="px-4 py-2.5 text-gray-700 text-xs">{row.procedures}</td>
                         <td className="px-4 py-2.5 text-right tabular-nums text-gray-700">
                           {row.proceduresTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -934,7 +952,7 @@ const DashboardPage: React.FC = () => {
                   <tfoot>
                     <tr className="bg-emerald-50 border-t-2 border-emerald-300">
                       <td className="px-4 py-3" />
-                      <td className="px-4 py-3 font-bold text-emerald-800" colSpan={3}>
+                      <td className="px-4 py-3 font-bold text-emerald-800" colSpan={4}>
                         รวมทั้งหมด ({paymentRows.length} รายการ)
                       </td>
                       <td className="px-4 py-3 text-right font-bold text-gray-800 tabular-nums">
@@ -980,6 +998,13 @@ const DashboardPage: React.FC = () => {
                       </span>
                     </div>
                     <p className="text-xs text-gray-600 mb-2">{row.procedures}</p>
+                    {row.interest && (
+                      <p className="text-xs mb-2">
+                        <span className="inline-flex px-2 py-0.5 bg-amber-50 text-amber-700 text-[11px] rounded-full border border-amber-200">
+                          {row.interest}
+                        </span>
+                      </p>
+                    )}
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       <div className="flex justify-between bg-gray-50 rounded px-2 py-1">
                         <span className="text-gray-500">ยอดรวม</span>
