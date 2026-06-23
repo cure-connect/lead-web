@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
-import { Search, Plus, Trash2, X, Users, CalendarCheck, Clock, XCircle, Eye, UserCheck, Wallet, Calendar, ChevronRight, ChevronDown, User, Loader2, Pencil, History } from "lucide-react";
+import { Search, Plus, Trash2, X, Users, CalendarCheck, Clock, XCircle, Eye, UserCheck, Wallet, Calendar, CalendarPlus, ChevronRight, ChevronDown, User, Loader2, Pencil, History } from "lucide-react";
 import { type Lead } from "../types";
 import Modal from "../components/UI/Modal";
 import LeadForm from "../components/UI/LeadForm";
@@ -66,6 +66,7 @@ const LeadsPage: React.FC = () => {
   const [leadToDelete, setLeadToDelete] = useState<Lead | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [statusModalLead, setStatusModalLead] = useState<Lead | null>(null);
+  const [scheduleModalLead, setScheduleModalLead] = useState<Lead | null>(null);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [viewingLead, setViewingLead] = useState<Lead | null>(null);
 
@@ -630,6 +631,12 @@ const LeadsPage: React.FC = () => {
                               className="w-4 h-4 text-blue-600 cursor-pointer hover:scale-110 transition-transform"
                               onClick={() => setViewingLead(lead)}
                             />
+                            {lead.status === "pending" && (
+                              <CalendarPlus
+                                className="w-4 h-4 text-indigo-600 cursor-pointer hover:scale-110 transition-transform"
+                                onClick={() => setScheduleModalLead(lead)}
+                              />
+                            )}
                             {lead.status === "arrived" && (
                               <Pencil
                                 className="w-4 h-4 text-amber-600 cursor-pointer hover:scale-110 transition-transform"
@@ -799,6 +806,15 @@ const LeadsPage: React.FC = () => {
                           <Eye className="w-4 h-4" />
                           ดูข้อมูล
                         </button>
+                        {lead.status === "pending" && (
+                          <button
+                            onClick={() => setScheduleModalLead(lead)}
+                            className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-indigo-600 bg-indigo-50 rounded-lg active:bg-indigo-100 transition-colors"
+                          >
+                            <CalendarPlus className="w-4 h-4" />
+                            ทำนัด
+                          </button>
+                        )}
                         {lead.status === "arrived" && (
                           <button
                             onClick={() => setEditingLead(lead)}
@@ -842,6 +858,19 @@ const LeadsPage: React.FC = () => {
           onSave={async () => {
             await fetchLeads(selectedYear);
             setStatusModalLead(null);
+          }}
+          onSuccess={(message) => toast.success(message)}
+          onError={(message) => toast.error(message)}
+        />
+      )}
+
+      {scheduleModalLead && (
+        <ScheduleModal
+          lead={scheduleModalLead}
+          onClose={() => setScheduleModalLead(null)}
+          onSaved={async () => {
+            await fetchLeads(selectedYear);
+            setScheduleModalLead(null);
           }}
           onSuccess={(message) => toast.success(message)}
           onError={(message) => toast.error(message)}
@@ -2071,6 +2100,179 @@ const StatusModal = ({
             <button
               onClick={handleSave}
               disabled={!selectedStatus || isSaving}
+              className="px-5 py-2 bg-[#1479FF] text-white rounded-lg text-sm font-medium hover:bg-[#0066E6] disabled:bg-gray-300 transition-colors flex items-center gap-2"
+            >
+              {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+              {isSaving ? "กำลังบันทึก..." : "บันทึก"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ============================================
+// ScheduleModal - ทำนัดหมายให้ lead ที่ยัง "ยังไม่นัด" (pending)
+// แก้ได้เฉพาะ: วันที่ + เวลานัด  →  เปลี่ยนสถานะเป็น "ทำนัด" (scheduled)
+// วันที่นัดห้ามเป็นค่าว่าง
+// ============================================
+const ScheduleModal = ({
+  lead,
+  onClose,
+  onSaved,
+  onSuccess,
+  onError,
+}: {
+  lead: Lead;
+  onClose: () => void;
+  onSaved: () => void | Promise<void>;
+  onSuccess?: (message: string) => void;
+  onError?: (message: string) => void;
+}) => {
+  const [appointmentDate, setAppointmentDate] = useState("");
+  const [appointmentTime, setAppointmentTime] = useState("");
+  const [validationError, setValidationError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (isSaving) return;
+
+    // วันที่นัดห้ามเป็นค่าว่าง
+    if (!appointmentDate) {
+      setValidationError("กรุณาเลือกวันที่นัดหมาย");
+      return;
+    }
+
+    try {
+      setValidationError("");
+      setIsSaving(true);
+
+      // เวลาไม่บังคับ — ถ้าไม่ระบุใช้ 00:00
+      const time = appointmentTime || "00:00";
+
+      const payload = {
+        appointments: {
+          status: "scheduled",
+          date: `${appointmentDate}T${time}:00+07:00`,
+        },
+      };
+
+      await api.patch(`/${lead.id}`, payload);
+
+      await onSaved();
+      onSuccess?.("ทำนัดหมายสำเร็จ");
+      onClose();
+    } catch (err) {
+      console.error("ทำนัดหมายไม่สำเร็จ", err);
+      onError?.("ทำนัดหมายไม่สำเร็จ");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center z-50">
+      <div className="bg-white w-full sm:max-w-md sm:w-full sm:mx-4 max-h-[85dvh] sm:max-h-[85vh] flex flex-col shadow-xl overflow-hidden rounded-t-2xl sm:rounded-2xl">
+        <div className="flex justify-between items-center px-4 sm:px-6 py-3 bg-[#1479FF] shrink-0">
+          <h2 className="text-base font-semibold text-white">ทำนัดหมาย</h2>
+          <button
+            onClick={onClose}
+            className="p-1 rounded-full hover:bg-white/20 transition-colors"
+          >
+            <X className="w-5 h-5 text-white" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 pb-6 sm:p-6 space-y-5 overscroll-contain">
+          {/* ข้อมูลคนไข้ (อ่านอย่างเดียว) */}
+          <div className="flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3">
+            <div className="p-2 bg-indigo-100 rounded-lg">
+              <User className="w-5 h-5 text-indigo-600" />
+            </div>
+            <div className="min-w-0">
+              <p className="font-medium text-gray-900 truncate">
+                {lead.name}
+                {lead.nickname && (
+                  <span className="text-gray-500 font-normal"> ({lead.nickname})</span>
+                )}
+              </p>
+              <p className="text-sm text-gray-500">{lead.phone || "-"}</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+            <div className="space-y-1.5">
+              <label
+                htmlFor="schedule-date"
+                className="block text-sm font-medium text-gray-700"
+              >
+                วันที่นัด <span className="text-red-500">*</span>
+              </label>
+              <input
+                id="schedule-date"
+                type="date"
+                lang="en-GB"
+                value={appointmentDate}
+                onChange={(e) => {
+                  setAppointmentDate(e.target.value);
+                  if (validationError) setValidationError("");
+                }}
+                className={`
+                  block w-full px-4 py-3.5
+                  border border-gray-300 rounded-lg
+                  text-base
+                  focus:ring-2 focus:ring-[#1479FF] focus:border-[#1479FF] focus:outline-none
+                  min-h-[52px]
+                  appearance-none
+                `}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label
+                htmlFor="schedule-time"
+                className="block text-sm font-medium text-gray-700"
+              >
+                เวลานัด
+              </label>
+              <input
+                id="schedule-time"
+                type="time"
+                value={appointmentTime}
+                onChange={(e) => setAppointmentTime(e.target.value)}
+                className={`
+                  block w-full px-4 py-3.5
+                  border border-gray-300 rounded-lg
+                  text-base
+                  focus:ring-2 focus:ring-[#1479FF] focus:border-[#1479FF] focus:outline-none
+                  min-h-[52px]
+                  appearance-none
+                `}
+              />
+            </div>
+          </div>
+
+          <p className="text-xs text-gray-500">
+            เมื่อบันทึก สถานะจะเปลี่ยนจาก "ยังไม่นัด" เป็น "ทำนัด"
+          </p>
+        </div>
+
+        <div className="px-6 py-3 bg-gray-50 shrink-0">
+          {validationError && (
+            <p className="text-sm text-red-500 mb-3">* {validationError}</p>
+          )}
+          <div className="flex justify-end gap-3">
+            <button
+              onClick={onClose}
+              disabled={isSaving}
+              className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors disabled:opacity-50"
+            >
+              ยกเลิก
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={isSaving}
               className="px-5 py-2 bg-[#1479FF] text-white rounded-lg text-sm font-medium hover:bg-[#0066E6] disabled:bg-gray-300 transition-colors flex items-center gap-2"
             >
               {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
