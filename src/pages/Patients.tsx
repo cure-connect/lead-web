@@ -346,16 +346,16 @@ const PatientsPage: React.FC = () => {
         }
     };
 
-    const openEditModal = (patient: Patient) => {
-        setEditForm({
-            fullname: patient.fullname || "",
-            nickname: patient.nickname || "",
-            tel: patient.tel || "",
-            socialMedia: patient.socialMedia || "",
-        });
-        setEditTelDuplicate(null);
-        setEditModal(patient);
-    };
+    // const openEditModal = (patient: Patient) => {
+    //     setEditForm({
+    //         fullname: patient.fullname || "",
+    //         nickname: patient.nickname || "",
+    //         tel: patient.tel || "",
+    //         socialMedia: patient.socialMedia || "",
+    //     });
+    //     setEditTelDuplicate(null);
+    //     setEditModal(patient);
+    // };
 
     const handleEditSubmit = async () => {
         if (!editModal || !editForm.fullname.trim()) return;
@@ -532,9 +532,9 @@ const PatientsPage: React.FC = () => {
                                         <div className="border-t border-gray-100">
                                             {/* Actions */}
                                             <div className="px-4 sm:px-5 py-3 bg-gray-50 flex flex-wrap gap-2">
-                                                <button onClick={(e) => { e.stopPropagation(); openEditModal(patient); }} className="flex items-center gap-1.5 px-3 py-2 bg-gray-600 hover:bg-gray-700 text-white text-xs font-medium rounded-lg transition-colors">
+                                                {/* <button onClick={(e) => { e.stopPropagation(); openEditModal(patient); }} className="flex items-center gap-1.5 px-3 py-2 bg-gray-600 hover:bg-gray-700 text-white text-xs font-medium rounded-lg transition-colors">
                                                     <Pencil className="w-3.5 h-3.5" /> แก้ไขข้อมูล
-                                                </button>
+                                                </button> */}
                                                 <button onClick={(e) => { e.stopPropagation(); openDepositModal("deposit", patient); }} className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium rounded-lg transition-colors">
                                                     <ArrowDownCircle className="w-3.5 h-3.5" /> เพิ่มมัดจำ
                                                 </button>
